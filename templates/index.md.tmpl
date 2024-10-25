@@ -1,0 +1,23 @@
+---
+page_title: "Provider: Tunnel"
+description: |-
+  The Tunnel provider is used to manage local network tunnels.
+---
+
+# Tunnel Provider
+
+The Tunnel provider is used to manage local network tunnels. This enables users to
+securely access and manage remote servers (databases, web servers, etc.) in private
+networks without needing to open additional ports to the outside networks.
+
+The provider is compatible with HashiCorp Cloud Platform (HCP)
+
+## Available tunnel types
+
+- [AWS Systems Manager (SSM)](https://docs.aws.amazon.com/systems-manager/latest/userguide/)
+
+## Example Usage
+
+{{ tffile "examples/provider/provider.tf" }}
+
+{{- /* No schema in this provider, so no need for this: .SchemaMarkdown | trimspace */ -}}

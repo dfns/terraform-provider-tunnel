@@ -1,24 +1,3 @@
----
-page_title: "Provider: Tunnel"
-description: |-
-  The Tunnel provider is used to manage local network tunnels.
----
-
-# Tunnel Provider
-
-The Tunnel provider is used to manage local network tunnels. This enables users to
-securely access and manage remote servers (databases, web servers, etc.) in private
-networks without needing to open additional ports to the outside networks.
-
-The provider is compatible with HashiCorp Cloud Platform (HCP)
-
-## Available tunnel types
-
-- [AWS Systems Manager (SSM)](https://docs.aws.amazon.com/systems-manager/latest/userguide/)
-
-## Example Usage
-
-```terraform
 terraform {
   required_providers {
     tunnel = {
@@ -44,4 +23,3 @@ provider "kubernetes" {
   client_key             = file("~/.kube/client-key.pem")
   cluster_ca_certificate = file("~/.kube/cluster-ca-cert.pem")
 }
-```
