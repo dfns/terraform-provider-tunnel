@@ -6,9 +6,12 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/provider"
+	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 )
 
@@ -21,7 +24,7 @@ var (
 	// https://goreleaser.com/cookbooks/using-main.version/
 )
 
-func main() {
+func StartServer() error {
 	var debug bool
 
 	flag.BoolVar(&debug, "debug", false, "set to true to run the provider with support for debuggers like delve")
@@ -32,7 +35,33 @@ func main() {
 		Debug:   debug,
 	}
 
-	err := providerserver.Serve(context.Background(), provider.New(version), opts)
+	return providerserver.Serve(context.Background(), provider.New(version), opts)
+}
+
+func StartSSM() error {
+	if len(os.Args) < 7 {
+		return fmt.Errorf("missing required arguments")
+	}
+
+	cfg := ssm.TunnelConfig{
+		SSMRegion:   os.Args[1],
+		SSMInstance: os.Args[2],
+		TargetHost:  os.Args[3],
+		TargetPort:  os.Args[4],
+		LocalPort:   os.Args[5],
+	}
+
+	return ssm.StartRemoteTunnel(context.Background(), cfg, os.Args[6])
+}
+
+func main() {
+	var err error
+
+	if os.Getenv(ssm.DEFAULT_SSM_ENV_NAME) != "" {
+		err = StartSSM()
+	} else {
+		err = StartServer()
+	}
 
 	if err != nil {
 		log.Fatal(err.Error())
