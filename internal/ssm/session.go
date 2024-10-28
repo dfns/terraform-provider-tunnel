@@ -18,6 +18,12 @@ type TunnelConfig struct {
 	LocalPort   string
 }
 
+type SessionParams struct {
+	SessionId  string
+	TokenValue string
+	StreamUrl  string
+}
+
 func CreateSessionInput(cfg TunnelConfig) ssm.StartSessionInput {
 	reqParams := make(map[string][]string)
 	reqParams["portNumber"] = []string{cfg.TargetPort}
@@ -31,11 +37,11 @@ func CreateSessionInput(cfg TunnelConfig) ssm.StartSessionInput {
 	}
 }
 
-func StartTunnelSession(ctx context.Context, cfg TunnelConfig) (map[string]string, error) {
+func StartTunnelSession(ctx context.Context, cfg TunnelConfig) (SessionParams, error) {
 	// Load AWS SDK config
 	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		return nil, err
+		return SessionParams{}, err
 	}
 	awsCfg.Region = cfg.SSMRegion
 
@@ -46,13 +52,12 @@ func StartTunnelSession(ctx context.Context, cfg TunnelConfig) (map[string]strin
 	sessionInput := CreateSessionInput(cfg)
 	sessionResponse, err := ssmClient.StartSession(ctx, &sessionInput)
 	if err != nil {
-		return nil, err
+		return SessionParams{}, err
 	}
 
-	resParams := make(map[string]string)
-	resParams["SessionId"] = *sessionResponse.SessionId
-	resParams["TokenValue"] = *sessionResponse.TokenValue
-	resParams["StreamUrl"] = *sessionResponse.StreamUrl
-
-	return resParams, nil
+	return SessionParams{
+		SessionId:  *sessionResponse.SessionId,
+		TokenValue: *sessionResponse.TokenValue,
+		StreamUrl:  *sessionResponse.StreamUrl,
+	}, nil
 }
