@@ -2,13 +2,8 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -98,54 +93,15 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	data.LocalHost = types.StringValue("localhost")
 	data.LocalPort = types.Int64Value(int64(localPort))
 
-	cfg := ssm.TunnelConfig{
+	_, err = ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
 		SSMRegion:   data.SSMRegion.ValueString(),
 		SSMInstance: data.SSMInstance.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),
 		TargetPort:  strconv.Itoa(int(data.TargetPort.ValueInt64())),
 		LocalPort:   strconv.Itoa(localPort),
-	}
-
-	// First we start a session using AWS SDK
-	// see https://github.com/aws/aws-cli/blob/master/awscli/customizations/sessionmanager.py#L104
-	sessionParams, err := ssm.StartTunnelSession(ctx, cfg)
+	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to start session", fmt.Sprintf("Error: %s", err))
-		return
-	}
-	sessionParamsJson, err := json.Marshal(sessionParams)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to marshal session params", fmt.Sprintf("Error: %s", err))
-		return
-	}
-
-	// Open a log file for the tunnel
-	tunnelLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, cfg.TargetPort))
-	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to open log file", fmt.Sprintf("Error: %s", err))
-		return
-	}
-
-	// Prepare the command
-	cmd := exec.Command(os.Args[0], cfg.SSMRegion, cfg.SSMInstance, cfg.TargetHost, cfg.TargetPort, cfg.LocalPort, strconv.Itoa(os.Getppid()))
-
-	// Append special environment variable to pass session parameters to the child process
-	// see https://github.com/aws/aws-cli/blob/master/awscli/customizations/sessionmanager.py#L140
-	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", ssm.DEFAULT_SSM_ENV_NAME, string(sessionParamsJson)))
-
-	// Redirect stdout and stderr to log file
-	cmd.Stdout = tunnelLogFile
-	cmd.Stderr = tunnelLogFile
-
-	// Run the command in the background
-	if err := cmd.Start(); err != nil {
-		resp.Diagnostics.AddError("Error starting tunnel", fmt.Sprintf("Error: %s", err))
-		return
-	}
-	time.Sleep(5 * time.Second)
-	if cmd.ProcessState.ExitCode() != -1 {
-		resp.Diagnostics.AddError("Error running tunnel", fmt.Sprintf("Error: %s", err))
+		resp.Diagnostics.AddError("Failed to fork tunnel process", fmt.Sprintf("Error: %s", err))
 		return
 	}
 
