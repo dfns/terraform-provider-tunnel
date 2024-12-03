@@ -18,6 +18,21 @@ The provider is compatible with HashiCorp Cloud Platform (HCP)
 
 ## Example Usage
 
+### Terraform >= 1.10
+
+~> **Note:** For optimal compatiblity with HashiCorp Cloud Platform, use [Ephemeral Resources](https://developer.hashicorp.com/terraform/language/resources/ephemeral).
+
 {{ tffile "examples/provider/provider.tf" }}
+
+### Terraform >= 1.0
+
+```terraform
+data "tunnel_ssm" "eks" {
+  target_host  = "https://eks-cluster.region.eks.amazonaws.com"
+  target_port  = 443
+  ssm_instance = "i-instanceid"
+  ssm_region   = "us-east-1"
+}
+```
 
 {{- /* No schema in this provider, so no need for this: .SchemaMarkdown | trimspace */ -}}
