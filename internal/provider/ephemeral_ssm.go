@@ -6,23 +6,24 @@ import (
 	"strconv"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
-	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
+	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	ps "github.com/shirou/gopsutil/v4/process"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ datasource.DataSource = &SSMDataSource{}
+var _ ephemeral.EphemeralResource = &SSMEphemeral{}
 
-func NewSSMDataSource() datasource.DataSource {
-	return &SSMDataSource{}
+func NewSSMEphemeral() ephemeral.EphemeralResource {
+	return &SSMEphemeral{}
 }
 
-// SSMDataSource defines the data source implementation.
-type SSMDataSource struct{}
+// SSMEphemeral defines the resource implementation.
+type SSMEphemeral struct{}
 
-// SSMDataSourceModel describes the data source data model.
-type SSMDataSourceModel struct {
+// SSMEphemeralModel describes the data source data model.
+type SSMEphemeralModel struct {
 	TargetHost  types.String `tfsdk:"target_host"`
 	TargetPort  types.Int64  `tfsdk:"target_port"`
 	LocalHost   types.String `tfsdk:"local_host"`
@@ -31,11 +32,11 @@ type SSMDataSourceModel struct {
 	SSMRegion   types.String `tfsdk:"ssm_region"`
 }
 
-func (d *SSMDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *SSMEphemeral) Metadata(ctx context.Context, req ephemeral.MetadataRequest, resp *ephemeral.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ssm"
 }
 
-func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *SSMEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, resp *ephemeral.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Create a local AWS SSM tunnel to a remote host",
 
@@ -71,8 +72,8 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 	}
 }
 
-func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data SSMDataSourceModel
+func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp *ephemeral.OpenResponse) {
+	var data SSMEphemeralModel
 
 	// Read Terraform configuration data into the model
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
@@ -93,7 +94,7 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	data.LocalHost = types.StringValue("localhost")
 	data.LocalPort = types.Int64Value(int64(localPort))
 
-	_, err = ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
+	cmd, err := ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
 		SSMRegion:   data.SSMRegion.ValueString(),
 		SSMInstance: data.SSMInstance.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),
@@ -106,5 +107,26 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	}
 
 	// Save data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resp.Diagnostics.Append(resp.Result.Set(ctx, &data)...)
+	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(cmd.Process.Pid)))
+}
+
+func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, resp *ephemeral.CloseResponse) {
+	tunnelBytes, _ := req.Private.GetKey(ctx, "tunnel_pid")
+	tunnelPID, err := strconv.Atoi(string(tunnelBytes))
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse tunnel PID", fmt.Sprintf("Error: %s", err))
+		return
+	}
+
+	tunnel, err := ps.NewProcess(int32(tunnelPID))
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to find tunnel process", fmt.Sprintf("Error: %s", err))
+		return
+	}
+
+	if err := tunnel.Terminate(); err != nil {
+		resp.Diagnostics.AddError("Failed to terminate tunnel process", fmt.Sprintf("Error: %s", err))
+		return
+	}
 }
