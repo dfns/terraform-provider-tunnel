@@ -5,12 +5,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 
+	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/provider"
+	"github.com/dfns/terraform-provider-tunnel/internal/ssh"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 )
@@ -38,27 +40,30 @@ func StartServer() error {
 	return providerserver.Serve(context.Background(), provider.New(version), opts)
 }
 
-func StartSSM() error {
-	if len(os.Args) < 7 {
-		return fmt.Errorf("missing required arguments")
+func StartTunnel(tun string) error {
+	cfgJson := os.Getenv(libs.TunnelConfEnv)
+	if cfgJson == "" {
+		return errors.New("missing tunnel configuration")
+	}
+	if err := os.Unsetenv(libs.TunnelConfEnv); err != nil {
+		return err
 	}
 
-	cfg := ssm.TunnelConfig{
-		SSMRegion:   os.Args[1],
-		SSMInstance: os.Args[2],
-		TargetHost:  os.Args[3],
-		TargetPort:  os.Args[4],
-		LocalPort:   os.Args[5],
+	switch tun {
+	case ssh.TunnelType:
+		return ssh.StartRemoteTunnel(context.Background(), cfgJson, os.Args[1])
+	case ssm.TunnelType:
+		return ssm.StartRemoteTunnel(context.Background(), cfgJson, os.Args[1])
+	default:
+		return errors.New("unknown tunnel type")
 	}
-
-	return ssm.StartRemoteTunnel(context.Background(), cfg, os.Args[6])
 }
 
 func main() {
 	var err error
 
-	if os.Getenv(ssm.DEFAULT_SSM_ENV_NAME) != "" {
-		err = StartSSM()
+	if tun := os.Getenv(libs.TunnelTypeEnv); tun != "" {
+		err = StartTunnel(tun)
 	} else {
 		err = StartServer()
 	}

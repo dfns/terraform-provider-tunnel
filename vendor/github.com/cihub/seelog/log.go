@@ -120,11 +120,16 @@ func createLoggerFromFullConfig(config *configForParsing) (LoggerInterface, erro
 // Example:
 //
 // after calling
-//     seelog.UseLogger(somelogger)
+//
+//	seelog.UseLogger(somelogger)
+//
 // the following:
-//     seelog.Debug("abc")
+//
+//	seelog.Debug("abc")
+//
 // will be equal to
-//     somelogger.Debug("abc")
+//
+//	somelogger.Debug("abc")
 //
 // IMPORTANT: UseLogger do NOT close the previous logger (only flushes it). So if
 // you constantly use it to replace loggers and don't close them in other code, you'll
@@ -153,21 +158,22 @@ func UseLogger(logger LoggerInterface) error {
 // used is disposed (except Default and Disabled loggers).
 //
 // Example:
-//     import log "github.com/cihub/seelog"
 //
-//     func main() {
-//         logger, err := log.LoggerFromConfigAsFile("seelog.xml")
+//	import log "github.com/cihub/seelog"
 //
-//         if err != nil {
-//             panic(err)
-//         }
+//	func main() {
+//	    logger, err := log.LoggerFromConfigAsFile("seelog.xml")
 //
-//         log.ReplaceLogger(logger)
-//         defer log.Flush()
+//	    if err != nil {
+//	        panic(err)
+//	    }
 //
-//         log.Trace("test")
-//         log.Debugf("var = %s", "abc")
-//     }
+//	    log.ReplaceLogger(logger)
+//	    defer log.Flush()
+//
+//	    log.Trace("test")
+//	    log.Debugf("var = %s", "abc")
+//	}
 func ReplaceLogger(logger LoggerInterface) error {
 	if logger == nil {
 		return errors.New("logger can not be nil")

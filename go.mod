@@ -1,6 +1,8 @@
 module github.com/dfns/terraform-provider-tunnel
 
-go 1.22.7
+go 1.23
+
+toolchain go1.23.4
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.32.6
@@ -9,6 +11,7 @@ require (
 	github.com/aws/session-manager-plugin v0.0.0-20241010233726-61cf1288c7c6
 	github.com/aws/smithy-go v1.22.1
 	github.com/hashicorp/terraform-plugin-framework v1.13.0
+	github.com/rgzr/sshtun v1.2.1
 	github.com/shirou/gopsutil/v4 v4.24.11
 )
 
@@ -59,10 +62,11 @@ require (
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/xtaci/smux v1.5.31 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/grpc v1.67.1 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
