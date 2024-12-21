@@ -9,6 +9,7 @@ The provider is compatible with HashiCorp Cloud Platform (HCP)
 ## Available tunnel types
 
 - [AWS Systems Manager (SSM)](https://docs.aws.amazon.com/systems-manager/latest/userguide/)
+- [SSH Tunneling](https://www.ssh.com/academy/ssh/tunneling)
 
 ## Example Usage
 
