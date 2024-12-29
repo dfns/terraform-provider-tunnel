@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	aws_ssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
@@ -94,7 +97,7 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	data.LocalHost = types.StringValue("localhost")
 	data.LocalPort = types.Int64Value(int64(localPort))
 
-	cmd, err := ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
+	forkResult, err := ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
 		SSMRegion:   data.SSMRegion.ValueString(),
 		SSMInstance: data.SSMInstance.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),
@@ -108,7 +111,9 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.Result.Set(ctx, &data)...)
-	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(cmd.Process.Pid)))
+	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(forkResult.Command.Process.Pid)))
+	resp.Private.SetKey(ctx, "session_id", []byte(forkResult.Session.SessionId))
+	resp.Private.SetKey(ctx, "ssm_region", []byte(data.SSMRegion.ValueString()))
 }
 
 func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, resp *ephemeral.CloseResponse) {
@@ -128,5 +133,26 @@ func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, re
 	if err := tunnel.Terminate(); err != nil {
 		resp.Diagnostics.AddError("Failed to terminate tunnel process", fmt.Sprintf("Error: %s", err))
 		return
+	}
+
+	sessionID, _ := req.Private.GetKey(ctx, "session_id")
+	ssmRegion, _ := req.Private.GetKey(ctx, "ssm_region")
+	if len(sessionID) > 0 {
+		awsCfg, err := config.LoadDefaultConfig(ctx)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to load AWS config", fmt.Sprintf("Error: %s", err))
+			return
+		}
+		awsCfg.Region = string(ssmRegion)
+
+		ssmClient := aws_ssm.NewFromConfig(awsCfg)
+
+		_, err = ssmClient.TerminateSession(ctx, &aws_ssm.TerminateSessionInput{
+			SessionId: aws.String(string(sessionID)),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to terminate SSM session", fmt.Sprintf("Error: %s", err))
+			return
+		}
 	}
 }

@@ -17,6 +17,11 @@ import (
 	ps "github.com/shirou/gopsutil/v4/process"
 )
 
+type ForkRemoteResult struct {
+	Command *exec.Cmd
+	Session SessionParams
+}
+
 func GetEndpoint(ctx context.Context, region string) (string, error) {
 	resolver := ssm.NewDefaultEndpointResolverV2()
 	endpoint, err := resolver.ResolveEndpoint(ctx, ssm.EndpointParameters{
@@ -58,7 +63,7 @@ func WatchProcess(pid string) (err error) {
 	return nil
 }
 
-func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) {
+func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*ForkRemoteResult, error) {
 	// First we start a session using AWS SDK
 	// see https://github.com/aws/aws-cli/blob/master/awscli/customizations/sessionmanager.py#L104
 	sessionParams, err := StartTunnelSession(ctx, cfg)
@@ -97,7 +102,10 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 		return nil, err
 	}
 
-	return cmd, nil
+	return &ForkRemoteResult{
+		Command: cmd,
+		Session: sessionParams,
+	}, nil
 }
 
 func StartRemoteTunnel(ctx context.Context, cfg TunnelConfig, parentPid string) (err error) {
