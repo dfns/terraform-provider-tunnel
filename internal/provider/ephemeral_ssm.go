@@ -137,22 +137,19 @@ func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, re
 
 	sessionID, _ := req.Private.GetKey(ctx, "session_id")
 	ssmRegion, _ := req.Private.GetKey(ctx, "ssm_region")
-	if len(sessionID) > 0 {
-		awsCfg, err := config.LoadDefaultConfig(ctx)
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to load AWS config", fmt.Sprintf("Error: %s", err))
-			return
-		}
-		awsCfg.Region = string(ssmRegion)
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(string(ssmRegion)))
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to load AWS config", fmt.Sprintf("Error: %s", err))
+		return
+	}
 
-		ssmClient := aws_ssm.NewFromConfig(awsCfg)
+	ssmClient := aws_ssm.NewFromConfig(awsCfg)
 
-		_, err = ssmClient.TerminateSession(ctx, &aws_ssm.TerminateSessionInput{
-			SessionId: aws.String(string(sessionID)),
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to terminate SSM session", fmt.Sprintf("Error: %s", err))
-			return
-		}
+	_, err = ssmClient.TerminateSession(ctx, &aws_ssm.TerminateSessionInput{
+		SessionId: aws.String(string(sessionID)),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to terminate SSM session", fmt.Sprintf("Error: %s", err))
+		return
 	}
 }
