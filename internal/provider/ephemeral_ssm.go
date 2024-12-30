@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -109,10 +110,19 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 		return
 	}
 
+	sessionID := forkResult.Session.SessionId
+
+	// Encode the session ID string as JSON
+	sessionIDBytes, err := json.Marshal(sessionID)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to serialise JSON for session ID", fmt.Sprintf("Error: %s", err))
+		return
+	}
+
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.Result.Set(ctx, &data)...)
 	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(forkResult.Command.Process.Pid)))
-	resp.Private.SetKey(ctx, "session_id", []byte(forkResult.Session.SessionId))
+	resp.Private.SetKey(ctx, "session_id", []byte(sessionIDBytes))
 	resp.Private.SetKey(ctx, "ssm_region", []byte(data.SSMRegion.ValueString()))
 }
 
@@ -135,8 +145,17 @@ func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, re
 		return
 	}
 
-	sessionID, _ := req.Private.GetKey(ctx, "session_id")
+	sessionIDBytes, _ := req.Private.GetKey(ctx, "session_id")
+	var sessionID string
+	if err := json.Unmarshal(sessionIDBytes, &sessionID); err != nil {
+		resp.Diagnostics.AddError("Failed to decode session ID JSON", fmt.Sprintf("Error: %s", err))
+		return
+	}
 	ssmRegion, _ := req.Private.GetKey(ctx, "ssm_region")
+	if len(sessionID) < 1 {
+		resp.Diagnostics.AddWarning("Cannot close SSM tunnel", "SessionID length received is 0")
+		return
+	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(string(ssmRegion)))
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to load AWS config", fmt.Sprintf("Error: %s", err))
