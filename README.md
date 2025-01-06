@@ -31,6 +31,7 @@ ephemeral "tunnel_ssm" "eks" {
   target_port  = 443
   ssm_instance = "i-instanceid"
   ssm_region   = "us-east-1"
+  ssm_profile  = "your-aws-profile"
 }
 
 provider "kubernetes" {
@@ -52,6 +53,7 @@ data "tunnel_ssm" "eks" {
   target_port  = 443
   ssm_instance = "i-instanceid"
   ssm_region   = "us-east-1"
+  ssm_profile  = "your-aws-profile"
 }
 ```
 
