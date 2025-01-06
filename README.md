@@ -21,7 +21,7 @@ terraform {
   required_providers {
     tunnel = {
       source  = "Ezzahhh/tunnel"
-      version = ">= 1.1.2"
+      version = ">= 1.2.0"
     }
   }
 }
