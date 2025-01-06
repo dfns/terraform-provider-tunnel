@@ -14,8 +14,10 @@ import (
 	pluginSession "github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session"
 	_ "github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session/portsession"
 	"github.com/aws/smithy-go/ptr"
-	ps "github.com/shirou/gopsutil/v4/process"
+	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 )
+
+var TunnelType string = "ssm"
 
 func GetEndpoint(ctx context.Context, region string) (string, error) {
 	resolver := ssm.NewDefaultEndpointResolverV2()
@@ -26,36 +28,6 @@ func GetEndpoint(ctx context.Context, region string) (string, error) {
 		return "", err
 	}
 	return endpoint.URI.String(), nil
-}
-
-func WatchProcess(pid string) (err error) {
-	pidInt, err := strconv.Atoi(pid)
-	if err != nil {
-		return fmt.Errorf("invalid PID: %v", err)
-	}
-	parent, err := ps.NewProcess(int32(pidInt))
-	if err != nil {
-		return err
-	}
-	child, err := ps.NewProcess(int32(os.Getpid()))
-	if err != nil {
-		return err
-	}
-	// pool for parent process liveliness every 2 seconds
-	go func() {
-		for {
-			_, err := parent.Status()
-			if err != nil {
-				fmt.Printf("parent process exited: %v\n", err)
-				if err := child.Terminate(); err != nil {
-					fmt.Printf("failed to terminate process: %v\n", err)
-				}
-			}
-			time.Sleep(2 * time.Second)
-		}
-	}()
-
-	return nil
 }
 
 func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) {
@@ -70,6 +42,11 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 		return nil, err
 	}
 
+	tunnelCfgJson, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// Open a log file for the tunnel
 	tunnelLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, cfg.TargetPort))
 	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -78,11 +55,16 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 	}
 
 	// Prepare the command
-	cmd := exec.Command(os.Args[0], cfg.SSMRegion, cfg.SSMInstance, cfg.TargetHost, cfg.TargetPort, cfg.LocalPort, strconv.Itoa(os.Getppid()))
+	cmd := exec.Command(os.Args[0], strconv.Itoa(os.Getppid()))
 
 	// Append special environment variable to pass session parameters to the child process
 	// see https://github.com/aws/aws-cli/blob/master/awscli/customizations/sessionmanager.py#L140
-	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", DEFAULT_SSM_ENV_NAME, string(sessionParamsJson)))
+	cmd.Env = append(
+		os.Environ(),
+		fmt.Sprintf("%s=%s", libs.TunnelTypeEnv, TunnelType),
+		fmt.Sprintf("%s=%s", libs.TunnelConfEnv, string(tunnelCfgJson)),
+		fmt.Sprintf("%s=%s", DEFAULT_SSM_ENV_NAME, string(sessionParamsJson)),
+	)
 
 	// Redirect stdout and stderr to log file
 	cmd.Stdout = tunnelLogFile
@@ -92,17 +74,24 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+
 	time.Sleep(5 * time.Second)
-	if cmd.ProcessState.ExitCode() != -1 {
-		return nil, err
+
+	if err = libs.CheckProcessExists(cmd.Process.Pid); err != nil {
+		return nil, fmt.Errorf("tunnel process failed to start. check %s for more information", tunnelLogPath)
 	}
 
 	return cmd, nil
 }
 
-func StartRemoteTunnel(ctx context.Context, cfg TunnelConfig, parentPid string) (err error) {
+func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid string) (err error) {
+	var cfg TunnelConfig
+	if err := json.Unmarshal([]byte(cfgJson), &cfg); err != nil {
+		return err
+	}
+
 	// Watch parent process lifecycle ie. main terraform process
-	err = WatchProcess(parentPid)
+	err = libs.WatchProcess(parentPid)
 	if err != nil {
 		return err
 	}
