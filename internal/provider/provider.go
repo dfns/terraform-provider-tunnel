@@ -40,12 +40,14 @@ func (p *TunnelProvider) Resources(ctx context.Context) []func() resource.Resour
 
 func (p *TunnelProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
+		NewSSHDataSource,
 		NewSSMDataSource,
 	}
 }
 
 func (p *TunnelProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
 	return []func() ephemeral.EphemeralResource{
+		NewSSHEphemeral,
 		NewSSMEphemeral,
 	}
 }

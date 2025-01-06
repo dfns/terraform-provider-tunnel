@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
@@ -83,7 +84,7 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	}
 
 	// Get a free port for the local tunnel
-	localPort, err := GetFreePort()
+	localPort, err := libs.GetFreePort()
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
 		return
