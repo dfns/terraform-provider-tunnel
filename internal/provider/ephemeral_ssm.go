@@ -128,7 +128,7 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.Result.Set(ctx, &data)...)
 	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(forkResult.Command.Process.Pid)))
-	resp.Private.SetKey(ctx, "session_id", []byte(sessionIDBytes))
+	resp.Private.SetKey(ctx, "session_id", sessionIDBytes)
 	resp.Private.SetKey(ctx, "ssm_region", []byte(data.SSMRegion.ValueString()))
 	resp.Private.SetKey(ctx, "ssm_profile", []byte(data.SSMProfile.ValueString()))
 }
@@ -177,7 +177,7 @@ func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, re
 	ssmClient := aws_ssm.NewFromConfig(awsCfg)
 
 	_, err = ssmClient.TerminateSession(ctx, &aws_ssm.TerminateSessionInput{
-		SessionId: aws.String(string(sessionID)),
+		SessionId: aws.String(sessionID),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to terminate SSM session", fmt.Sprintf("Error: %s", err))
