@@ -70,7 +70,7 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 	return cmd, nil
 }
 
-func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid string) (err error) {
+func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err error) {
 	var cfg TunnelConfig
 	if err := json.Unmarshal([]byte(cfgJson), &cfg); err != nil {
 		return err
