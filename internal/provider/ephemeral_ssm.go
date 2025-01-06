@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/Ezzahhh/terraform-provider-tunnel/internal/ssm"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	aws_ssm "github.com/aws/aws-sdk-go-v2/service/ssm"
-	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -34,6 +34,7 @@ type SSMEphemeralModel struct {
 	LocalPort   types.Int64  `tfsdk:"local_port"`
 	SSMInstance types.String `tfsdk:"ssm_instance"`
 	SSMRegion   types.String `tfsdk:"ssm_region"`
+	SSMProfile  types.String `tfsdk:"ssm_profile"`
 }
 
 func (d *SSMEphemeral) Metadata(ctx context.Context, req ephemeral.MetadataRequest, resp *ephemeral.MetadataResponse) {
@@ -61,6 +62,10 @@ func (d *SSMEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, 
 			"ssm_region": schema.StringAttribute{
 				MarkdownDescription: "AWS Region where the instance is located",
 				Required:            true,
+			},
+			"ssm_profile": schema.StringAttribute{
+				MarkdownDescription: "AWS profile to use",
+				Optional:            true,
 			},
 
 			// Computed attributes
@@ -99,6 +104,7 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	data.LocalPort = types.Int64Value(int64(localPort))
 
 	forkResult, err := ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
+		SSMProfile:  data.SSMProfile.ValueString(),
 		SSMRegion:   data.SSMRegion.ValueString(),
 		SSMInstance: data.SSMInstance.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),
@@ -124,6 +130,7 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(forkResult.Command.Process.Pid)))
 	resp.Private.SetKey(ctx, "session_id", []byte(sessionIDBytes))
 	resp.Private.SetKey(ctx, "ssm_region", []byte(data.SSMRegion.ValueString()))
+	resp.Private.SetKey(ctx, "ssm_profile", []byte(data.SSMProfile.ValueString()))
 }
 
 func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, resp *ephemeral.CloseResponse) {
@@ -156,7 +163,12 @@ func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, re
 		resp.Diagnostics.AddWarning("Cannot close SSM tunnel", "SessionID length received is 0")
 		return
 	}
-	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(string(ssmRegion)))
+	ssmProfile, _ := req.Private.GetKey(ctx, "ssm_profile")
+	if len(ssmProfile) < 1 {
+		resp.Diagnostics.AddWarning("No SSM profile provided", "SSM profile length received is 0")
+		return
+	}
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(string(ssmRegion)), config.WithSharedConfigProfile(string(ssmProfile)))
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to load AWS config", fmt.Sprintf("Error: %s", err))
 		return

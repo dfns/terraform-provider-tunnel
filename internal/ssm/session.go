@@ -11,6 +11,7 @@ import (
 const DEFAULT_SSM_ENV_NAME = "AWS_SSM_START_SESSION_RESPONSE"
 
 type TunnelConfig struct {
+	SSMProfile  string
 	SSMRegion   string
 	SSMInstance string
 	TargetHost  string
@@ -39,7 +40,7 @@ func CreateSessionInput(cfg TunnelConfig) ssm.StartSessionInput {
 
 func StartTunnelSession(ctx context.Context, cfg TunnelConfig) (SessionParams, error) {
 	// Load AWS SDK config
-	awsCfg, err := config.LoadDefaultConfig(ctx)
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cfg.SSMProfile))
 	if err != nil {
 		return SessionParams{}, err
 	}

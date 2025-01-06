@@ -41,6 +41,10 @@ provider "postgresql" {
 - `target_host` (String) The DNS name or IP address of the remote host
 - `target_port` (Number) The port number of the remote host
 
+### Optional
+
+- `ssm_profile` (String) AWS profile to use
+
 ### Read-Only
 
 - `local_host` (String) The DNS name or IP address of the local host

@@ -10,8 +10,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/dfns/terraform-provider-tunnel/internal/provider"
-	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
+	"github.com/Ezzahhh/terraform-provider-tunnel/internal/provider"
+	"github.com/Ezzahhh/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 )
 
@@ -31,7 +31,7 @@ func StartServer() error {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/dfns/tunnel",
+		Address: "registry.terraform.io/Ezzahhh/tunnel",
 		Debug:   debug,
 	}
 

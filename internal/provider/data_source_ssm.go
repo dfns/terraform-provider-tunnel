@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
+	"github.com/Ezzahhh/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -29,6 +29,7 @@ type SSMDataSourceModel struct {
 	LocalPort   types.Int64  `tfsdk:"local_port"`
 	SSMInstance types.String `tfsdk:"ssm_instance"`
 	SSMRegion   types.String `tfsdk:"ssm_region"`
+	SSMProfile  types.String `tfsdk:"ssm_profile"`
 }
 
 func (d *SSMDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -56,6 +57,10 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 			"ssm_region": schema.StringAttribute{
 				MarkdownDescription: "AWS Region where the instance is located",
 				Required:            true,
+			},
+			"ssm_profile": schema.StringAttribute{
+				MarkdownDescription: "AWS profile to use",
+				Optional:            true,
 			},
 
 			// Computed attributes
@@ -94,6 +99,7 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	data.LocalPort = types.Int64Value(int64(localPort))
 
 	_, err = ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
+		SSMProfile:  data.SSMProfile.ValueString(),
 		SSMRegion:   data.SSMRegion.ValueString(),
 		SSMInstance: data.SSMInstance.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),

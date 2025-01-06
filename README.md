@@ -20,8 +20,8 @@ The provider is compatible with HashiCorp Cloud Platform (HCP)
 terraform {
   required_providers {
     tunnel = {
-      source  = "dfns/tunnel"
-      version = ">= 1.1.0"
+      source  = "Ezzahhh/tunnel"
+      version = ">= 1.1.2"
     }
   }
 }

@@ -1,4 +1,4 @@
-module github.com/dfns/terraform-provider-tunnel
+module github.com/Ezzahhh/terraform-provider-tunnel
 
 go 1.22.7
 
