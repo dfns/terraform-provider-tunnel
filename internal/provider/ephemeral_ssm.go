@@ -164,10 +164,6 @@ func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, re
 		return
 	}
 	ssmProfile, _ := req.Private.GetKey(ctx, "ssm_profile")
-	if len(ssmProfile) < 1 {
-		resp.Diagnostics.AddWarning("No SSM profile provided", "SSM profile length received is 0")
-		return
-	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(string(ssmRegion)), config.WithSharedConfigProfile(string(ssmProfile)))
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to load AWS config", fmt.Sprintf("Error: %s", err))
