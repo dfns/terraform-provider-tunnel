@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/provider"
@@ -49,11 +51,19 @@ func StartTunnel(tun string) error {
 		return err
 	}
 
+	if len(os.Args) < 2 {
+		return errors.New("missing parent PID")
+	}
+	parentPid, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		return fmt.Errorf("invalid parent PID: %v", err)
+	}
+
 	switch tun {
 	case ssh.TunnelType:
-		return ssh.StartRemoteTunnel(context.Background(), cfgJson, os.Args[1])
+		return ssh.StartRemoteTunnel(context.Background(), cfgJson, parentPid)
 	case ssm.TunnelType:
-		return ssm.StartRemoteTunnel(context.Background(), cfgJson, os.Args[1])
+		return ssm.StartRemoteTunnel(context.Background(), cfgJson, parentPid)
 	default:
 		return errors.New("unknown tunnel type")
 	}

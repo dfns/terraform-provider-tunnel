@@ -2,19 +2,17 @@ package libs
 
 import (
 	"fmt"
+	"log"
 	"os"
-	"strconv"
+	"runtime"
+	"syscall"
 	"time"
 
 	ps "github.com/shirou/gopsutil/v4/process"
 )
 
-func WatchProcess(pid string) (err error) {
-	pidInt, err := strconv.Atoi(pid)
-	if err != nil {
-		return fmt.Errorf("invalid PID: %v", err)
-	}
-	parent, err := ps.NewProcess(int32(pidInt))
+func WatchProcess(pid int) (err error) {
+	parent, err := ps.NewProcess(int32(pid))
 	if err != nil {
 		return err
 	}
@@ -27,9 +25,14 @@ func WatchProcess(pid string) (err error) {
 		for {
 			_, err := parent.Status()
 			if err != nil {
-				fmt.Printf("parent process exited: %v\n", err)
-				if err := child.Terminate(); err != nil {
-					fmt.Printf("failed to terminate process: %v\n", err)
+				log.Printf("parent process exited: %v\n", err)
+				if runtime.GOOS == "windows" {
+					err = child.Terminate()
+				} else {
+					err = child.SendSignal(syscall.SIGINT)
+				}
+				if err != nil {
+					log.Printf("failed to terminate process: %v\n", err)
 				}
 			}
 			time.Sleep(2 * time.Second)
@@ -50,6 +53,23 @@ func CheckProcessExists(pid int) error {
 	}
 	if stats[0] == "zombie" {
 		return fmt.Errorf("process died")
+	}
+
+	return nil
+}
+
+func Interrupt(pid int) error {
+	cmd, err := ps.NewProcess(int32(pid))
+	if err != nil {
+		return err
+	}
+	if runtime.GOOS == "windows" {
+		err = cmd.Terminate()
+	} else {
+		err = cmd.SendSignal(syscall.SIGINT)
+	}
+	if err != nil {
+		return err
 	}
 
 	return nil

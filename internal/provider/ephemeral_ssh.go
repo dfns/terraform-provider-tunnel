@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	ps "github.com/shirou/gopsutil/v4/process"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -139,13 +138,7 @@ func (d *SSHEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, re
 		return
 	}
 
-	tunnel, err := ps.NewProcess(int32(tunnelPID))
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to find tunnel process", fmt.Sprintf("Error: %s", err))
-		return
-	}
-
-	if err := tunnel.Terminate(); err != nil {
+	if err := libs.Interrupt(tunnelPID); err != nil {
 		resp.Diagnostics.AddError("Failed to terminate tunnel process", fmt.Sprintf("Error: %s", err))
 		return
 	}

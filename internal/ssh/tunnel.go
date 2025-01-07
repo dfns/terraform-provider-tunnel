@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -69,7 +70,7 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 	return cmd, nil
 }
 
-func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid string) (err error) {
+func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err error) {
 	var cfg TunnelConfig
 	if err := json.Unmarshal([]byte(cfgJson), &cfg); err != nil {
 		return err
@@ -106,6 +107,15 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid string) (e
 		}
 		_ = conn.Close()
 	})
+
+	// Handle interrupt signal
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		<-c
+		log.Println("stopping tunnel: received interrupt signal")
+		sshTun.Stop()
+	}()
 
 	if err = sshTun.Start(ctx); err != nil {
 		log.Printf("tunnel error: %v", err)
