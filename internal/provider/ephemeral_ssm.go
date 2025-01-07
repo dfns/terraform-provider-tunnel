@@ -2,18 +2,14 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
+	"github.com/Ezzahhh/terraform-provider-tunnel/internal/libs"
 	"github.com/Ezzahhh/terraform-provider-tunnel/internal/ssm"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	aws_ssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	ps "github.com/shirou/gopsutil/v4/process"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -92,7 +88,7 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	}
 
 	// Get a free port for the local tunnel
-	localPort, err := GetFreePort()
+	localPort, err := libs.GetFreePort()
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
 		return
@@ -103,8 +99,7 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	data.LocalHost = types.StringValue("localhost")
 	data.LocalPort = types.Int64Value(int64(localPort))
 
-	forkResult, err := ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
-		SSMProfile:  data.SSMProfile.ValueString(),
+	cmd, err := ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
 		SSMRegion:   data.SSMRegion.ValueString(),
 		SSMInstance: data.SSMInstance.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),
@@ -116,21 +111,9 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 		return
 	}
 
-	sessionID := forkResult.Session.SessionId
-
-	// Encode the session ID string as JSON
-	sessionIDBytes, err := json.Marshal(sessionID)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to serialise JSON for session ID", fmt.Sprintf("Error: %s", err))
-		return
-	}
-
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.Result.Set(ctx, &data)...)
-	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(forkResult.Command.Process.Pid)))
-	resp.Private.SetKey(ctx, "session_id", sessionIDBytes)
-	resp.Private.SetKey(ctx, "ssm_region", []byte(data.SSMRegion.ValueString()))
-	resp.Private.SetKey(ctx, "ssm_profile", []byte(data.SSMProfile.ValueString()))
+	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(cmd.Process.Pid)))
 }
 
 func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, resp *ephemeral.CloseResponse) {
@@ -141,42 +124,8 @@ func (d *SSMEphemeral) Close(ctx context.Context, req ephemeral.CloseRequest, re
 		return
 	}
 
-	tunnel, err := ps.NewProcess(int32(tunnelPID))
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to find tunnel process", fmt.Sprintf("Error: %s", err))
-		return
-	}
-
-	if err := tunnel.Terminate(); err != nil {
+	if err := libs.Interrupt(tunnelPID); err != nil {
 		resp.Diagnostics.AddError("Failed to terminate tunnel process", fmt.Sprintf("Error: %s", err))
-		return
-	}
-
-	sessionIDBytes, _ := req.Private.GetKey(ctx, "session_id")
-	var sessionID string
-	if err := json.Unmarshal(sessionIDBytes, &sessionID); err != nil {
-		resp.Diagnostics.AddError("Failed to decode session ID JSON", fmt.Sprintf("Error: %s", err))
-		return
-	}
-	ssmRegion, _ := req.Private.GetKey(ctx, "ssm_region")
-	if len(sessionID) < 1 {
-		resp.Diagnostics.AddWarning("Cannot close SSM tunnel", "SessionID length received is 0")
-		return
-	}
-	ssmProfile, _ := req.Private.GetKey(ctx, "ssm_profile")
-	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(string(ssmRegion)), config.WithSharedConfigProfile(string(ssmProfile)))
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to load AWS config", fmt.Sprintf("Error: %s", err))
-		return
-	}
-
-	ssmClient := aws_ssm.NewFromConfig(awsCfg)
-
-	_, err = ssmClient.TerminateSession(ctx, &aws_ssm.TerminateSessionInput{
-		SessionId: aws.String(sessionID),
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to terminate SSM session", fmt.Sprintf("Error: %s", err))
 		return
 	}
 }

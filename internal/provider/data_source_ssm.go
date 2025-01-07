@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/Ezzahhh/terraform-provider-tunnel/internal/libs"
 	"github.com/Ezzahhh/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -87,7 +88,7 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	}
 
 	// Get a free port for the local tunnel
-	localPort, err := GetFreePort()
+	localPort, err := libs.GetFreePort()
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
 		return
