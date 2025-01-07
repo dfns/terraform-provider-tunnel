@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	pluginSession "github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session"
 	_ "github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session/portsession"
@@ -30,10 +31,10 @@ func GetEndpoint(ctx context.Context, region string) (string, error) {
 	return endpoint.URI.String(), nil
 }
 
-func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) {
+func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) (*exec.Cmd, error) {
 	// First we start a session using AWS SDK
 	// see https://github.com/aws/aws-cli/blob/master/awscli/customizations/sessionmanager.py#L104
-	sessionParams, err := StartTunnelSession(ctx, cfg)
+	sessionParams, err := StartTunnelSession(ctx, awsCfg, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +103,6 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 		return err
 	}
 
-	profileName := ""
 	endpointUrl, err := GetEndpoint(ctx, cfg.SSMRegion)
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 		DEFAULT_SSM_ENV_NAME,
 		cfg.SSMRegion,
 		"StartSession",
-		profileName,
+		cfg.SSMProfile,
 		string(sessionInputJson),
 		endpointUrl,
 	}

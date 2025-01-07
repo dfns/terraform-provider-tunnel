@@ -24,12 +24,13 @@ type SSMDataSource struct{}
 
 // SSMDataSourceModel describes the data source data model.
 type SSMDataSourceModel struct {
-	TargetHost  types.String `tfsdk:"target_host"`
-	TargetPort  types.Int64  `tfsdk:"target_port"`
 	LocalHost   types.String `tfsdk:"local_host"`
 	LocalPort   types.Int64  `tfsdk:"local_port"`
 	SSMInstance types.String `tfsdk:"ssm_instance"`
+	SSMProfile  types.String `tfsdk:"ssm_profile"`
 	SSMRegion   types.String `tfsdk:"ssm_region"`
+	TargetHost  types.String `tfsdk:"target_host"`
+	TargetPort  types.Int64  `tfsdk:"target_port"`
 }
 
 func (d *SSMDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -54,9 +55,15 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 				MarkdownDescription: "Specify the exact Instance ID of the managed node to connect to for the session",
 				Required:            true,
 			},
+			"ssm_profile": schema.StringAttribute{
+				MarkdownDescription: "AWS profile name as set in credentials files. Can also be set using either the environment variables `AWS_PROFILE` or `AWS_DEFAULT_PROFILE`.",
+				Optional:            true,
+				Computed:            true,
+			},
 			"ssm_region": schema.StringAttribute{
-				MarkdownDescription: "AWS Region where the instance is located",
-				Required:            true,
+				MarkdownDescription: "AWS Region where the instance is located. The Region must be set. Can also be set using either the environment variables `AWS_REGION` or `AWS_DEFAULT_REGION`.",
+				Optional:            true,
+				Computed:            true,
 			},
 
 			// Computed attributes
@@ -94,13 +101,28 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	data.LocalHost = types.StringValue("localhost")
 	data.LocalPort = types.Int64Value(int64(localPort))
 
-	_, err = ssm.ForkRemoteTunnel(ctx, ssm.TunnelConfig{
-		SSMRegion:   data.SSMRegion.ValueString(),
+	tunnelCfg := ssm.TunnelConfig{
+		LocalPort:   strconv.Itoa(localPort),
 		SSMInstance: data.SSMInstance.ValueString(),
+		SSMProfile:  data.SSMProfile.ValueString(),
+		SSMRegion:   data.SSMRegion.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),
 		TargetPort:  strconv.Itoa(int(data.TargetPort.ValueInt64())),
-		LocalPort:   strconv.Itoa(localPort),
-	})
+	}
+
+	awsCfg, err := ssm.GetNewSDKConfig(ctx, tunnelCfg)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to initialize AWS SDK", fmt.Sprintf("Error: %s", err))
+		return
+	}
+
+	tunnelCfg.SSMRegion = awsCfg.Region
+	tunnelCfg.SSMProfile = ssm.GetSDKConfigProfile(awsCfg)
+
+	data.SSMRegion = types.StringValue(tunnelCfg.SSMRegion)
+	data.SSMProfile = types.StringValue(tunnelCfg.SSMProfile)
+
+	_, err = ssm.ForkRemoteTunnel(ctx, awsCfg, tunnelCfg)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to fork tunnel process", fmt.Sprintf("Error: %s", err))
 		return
