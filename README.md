@@ -1,5 +1,10 @@
 # Terraform Provider: Tunnel
 
+[![GitHub Release](https://img.shields.io/github/v/release/dfns/terraform-provider-tunnel)](https://github.com/dfns/terraform-provider-tunnel/releases/latest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dfns/terraform-provider-tunnel)](https://goreportcard.com/report/github.com/dfns/terraform-provider-tunnel)
+[![Terraform Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.terraform.io%2Fv2%2Fproviders%2F5739%2Fdownloads%2Fsummary&query=%24.data.attributes.total&logo=terraform&logoColor=white&label=downloads&color=%23844FBA)](https://registry.terraform.io/providers/dfns/tunnel)
+[![GitHub Downloads](https://img.shields.io/github/downloads/dfns/terraform-provider-tunnel/total?logo=github)](https://github.com/dfns/terraform-provider-tunnel/releases)
+
 The Tunnel provider is used to manage local network tunnels. This enables users to
 securely access and manage remote servers (databases, web servers, etc.) in private
 networks without needing to open additional ports to the outside networks.
@@ -15,7 +20,7 @@ The provider is compatible with HashiCorp Cloud Platform (HCP)
 
 ### Terraform >= 1.10
 
-> For optimal compatiblity with HashiCorp Cloud Platform, use [Ephemeral Resources](https://developer.hashicorp.com/terraform/language/resources/ephemeral)
+> For optimal compatibility with HashiCorp Cloud Platform, use [Ephemeral Resources](https://developer.hashicorp.com/terraform/language/resources/ephemeral)
 
 ```terraform
 terraform {
@@ -74,7 +79,7 @@ go install
 ## Adding Dependencies
 
 This provider uses [Go modules](https://github.com/golang/go/wiki/Modules).
-Please see the Go documentation for the most up to date information about using Go modules.
+Please see the Go documentation for the most up-to-date information about using Go modules.
 
 To add a new dependency `github.com/author/dependency` to your Terraform provider:
 
