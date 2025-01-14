@@ -2,7 +2,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/dfns/terraform-provider-tunnel)](https://github.com/dfns/terraform-provider-tunnel/releases/latest)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dfns/terraform-provider-tunnel)](https://goreportcard.com/report/github.com/dfns/terraform-provider-tunnel)
-[![Terraform Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.terraform.io%2Fv2%2Fproviders%2F5739%2Fdownloads%2Fsummary&query=%24.data.attributes.total&logo=terraform&logoColor=white&label=downloads&color=%23844FBA)](https://registry.terraform.io/providers/dfns/tunnel)
+[![Terraform Downloads](https://img.shields.io/terraform/provider/dt/5739?logo=terraform&logoColor=white&color=%23844FBA)](https://registry.terraform.io/providers/dfns/tunnel)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dfns/terraform-provider-tunnel/total?logo=github)](https://github.com/dfns/terraform-provider-tunnel/releases)
 
 The Tunnel provider is used to manage local network tunnels. This enables users to
