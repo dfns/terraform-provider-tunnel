@@ -28,6 +28,7 @@ type SSMEphemeralModel struct {
 	LocalPort   types.Int64  `tfsdk:"local_port"`
 	SSMInstance types.String `tfsdk:"ssm_instance"`
 	SSMProfile  types.String `tfsdk:"ssm_profile"`
+	SSMRole     types.String `tfsdk:"ssm_role"`
 	SSMRegion   types.String `tfsdk:"ssm_region"`
 	TargetHost  types.String `tfsdk:"target_host"`
 	TargetPort  types.Int64  `tfsdk:"target_port"`
@@ -57,6 +58,11 @@ func (d *SSMEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, 
 			},
 			"ssm_profile": schema.StringAttribute{
 				MarkdownDescription: "AWS profile name as set in credentials files. Can also be set using either the environment variables `AWS_PROFILE` or `AWS_DEFAULT_PROFILE`.",
+				Optional:            true,
+				Computed:            true,
+			},
+			"ssm_role": schema.StringAttribute{
+				MarkdownDescription: "ARN of an IAM role to assume. Can also be set using the environment variable `AWS_ROLE_ARN`.",
 				Optional:            true,
 				Computed:            true,
 			},
@@ -105,6 +111,7 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 		LocalPort:   strconv.Itoa(localPort),
 		SSMInstance: data.SSMInstance.ValueString(),
 		SSMProfile:  data.SSMProfile.ValueString(),
+		SSMRole:     data.SSMRole.ValueString(),
 		SSMRegion:   data.SSMRegion.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),
 		TargetPort:  strconv.Itoa(int(data.TargetPort.ValueInt64())),
@@ -118,9 +125,11 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 
 	tunnelCfg.SSMRegion = awsCfg.Region
 	tunnelCfg.SSMProfile = ssm.GetSDKConfigProfile(awsCfg)
+	tunnelCfg.SSMRole = ssm.GetSDKConfigRole(awsCfg)
 
 	data.SSMRegion = types.StringValue(tunnelCfg.SSMRegion)
 	data.SSMProfile = types.StringValue(tunnelCfg.SSMProfile)
+	data.SSMRole = types.StringValue(tunnelCfg.SSMRole)
 
 	cmd, err := ssm.ForkRemoteTunnel(ctx, awsCfg, tunnelCfg)
 	if err != nil {
