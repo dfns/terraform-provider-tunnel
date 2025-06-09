@@ -16,7 +16,7 @@ type TunnelConfig struct {
 	LocalPort   string
 	SSMInstance string
 	SSMProfile  string
-	SSMRole     string
+	SSMRoleARN  string
 	SSMRegion   string
 	TargetHost  string
 	TargetPort  string
@@ -44,9 +44,9 @@ func GetNewSDKConfig(ctx context.Context, cfg TunnelConfig) (aws.Config, error) 
 	}
 
 	// If role assumption is required, create STS client and configure assume role
-	if cfg.SSMRole != "" {
+	if cfg.SSMRoleARN != "" {
 		stsClient := sts.NewFromConfig(awsCfg)
-		assumeRoleProvider := stscreds.NewAssumeRoleProvider(stsClient, cfg.SSMRole)
+		assumeRoleProvider := stscreds.NewAssumeRoleProvider(stsClient, cfg.SSMRoleARN)
 		awsCfg.Credentials = assumeRoleProvider
 	}
 
