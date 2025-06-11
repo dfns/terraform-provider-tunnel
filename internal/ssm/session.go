@@ -47,7 +47,7 @@ func GetNewSDKConfig(ctx context.Context, cfg TunnelConfig) (aws.Config, error) 
 	if cfg.SSMRoleARN != "" {
 		stsClient := sts.NewFromConfig(awsCfg)
 		assumeRoleProvider := stscreds.NewAssumeRoleProvider(stsClient, cfg.SSMRoleARN)
-		awsCfg.Credentials = assumeRoleProvider
+		awsCfg.Credentials = aws.NewCredentialsCache(assumeRoleProvider)
 	}
 
 	return awsCfg, nil
