@@ -62,7 +62,7 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 				Computed:            true,
 			},
 			"ssm_role_arn": schema.StringAttribute{
-				MarkdownDescription: "ARN of an IAM role to assume. Can also be set using the environment variable `AWS_ROLE_ARN`.",
+				MarkdownDescription: "ARN of an IAM role to assume.",
 				Optional:            true,
 				Computed:            true,
 			},
