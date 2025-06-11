@@ -125,7 +125,11 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 
 	tunnelCfg.SSMRegion = awsCfg.Region
 	tunnelCfg.SSMProfile = ssm.GetSDKConfigProfile(awsCfg)
-	tunnelCfg.SSMRoleARN = ssm.GetSDKConfigRole(awsCfg)
+
+	// Only update SSMRoleARN if it wasn't explicitly provided
+	if tunnelCfg.SSMRoleARN == "" {
+		tunnelCfg.SSMRoleARN = ssm.GetSDKConfigRole(awsCfg)
+	}
 
 	data.SSMRegion = types.StringValue(tunnelCfg.SSMRegion)
 	data.SSMProfile = types.StringValue(tunnelCfg.SSMProfile)
