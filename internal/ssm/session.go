@@ -5,7 +5,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 const DEFAULT_SSM_ENV_NAME = "AWS_SSM_START_SESSION_RESPONSE"
@@ -14,6 +16,7 @@ type TunnelConfig struct {
 	LocalPort   string
 	SSMInstance string
 	SSMProfile  string
+	SSMRoleARN  string
 	SSMRegion   string
 	TargetHost  string
 	TargetPort  string
@@ -34,13 +37,35 @@ func GetNewSDKConfig(ctx context.Context, cfg TunnelConfig) (aws.Config, error) 
 		loadOptions = append(loadOptions, config.WithSharedConfigProfile(cfg.SSMProfile))
 	}
 
-	return config.LoadDefaultConfig(ctx, loadOptions...)
+	// Load base config first
+	awsCfg, err := config.LoadDefaultConfig(ctx, loadOptions...)
+	if err != nil {
+		return aws.Config{}, err
+	}
+
+	// If role assumption is required, create STS client and configure assume role
+	if cfg.SSMRoleARN != "" {
+		stsClient := sts.NewFromConfig(awsCfg)
+		assumeRoleProvider := stscreds.NewAssumeRoleProvider(stsClient, cfg.SSMRoleARN)
+		awsCfg.Credentials = aws.NewCredentialsCache(assumeRoleProvider)
+	}
+
+	return awsCfg, nil
 }
 
 func GetSDKConfigProfile(awsCfg aws.Config) string {
 	for _, cfg := range awsCfg.ConfigSources {
 		if p, ok := cfg.(config.SharedConfig); ok {
 			return p.Profile
+		}
+	}
+	return ""
+}
+
+func GetSDKConfigRole(awsCfg aws.Config) string {
+	for _, cfg := range awsCfg.ConfigSources {
+		if p, ok := cfg.(config.SharedConfig); ok {
+			return p.RoleARN
 		}
 	}
 	return ""

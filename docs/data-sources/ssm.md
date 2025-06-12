@@ -44,6 +44,7 @@ provider "postgresql" {
 
 - `ssm_profile` (String) AWS profile name as set in credentials files. Can also be set using either the environment variables `AWS_PROFILE` or `AWS_DEFAULT_PROFILE`.
 - `ssm_region` (String) AWS Region where the instance is located. The Region must be set. Can also be set using either the environment variables `AWS_REGION` or `AWS_DEFAULT_REGION`.
+- `ssm_role_arn` (String) ARN of an IAM role to assume.
 
 ### Read-Only
 
