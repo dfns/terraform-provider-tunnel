@@ -1,0 +1,37 @@
+name: Semantic release
+
+on:
+  schedule:
+    - cron: "0 18 * * 5" # At 18:00 on Friday.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+
+      - name: Configuration
+        uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
+        with:
+          path: .releaserc.yml
+          contents: |
+            branches:
+              - "main"
+            plugins:
+              - - "@semantic-release/commit-analyzer"
+                - releaseRules:
+                    - type: chore
+                      scope: deps
+                      release: patch
+
+      - name: Semantic release
+        uses: cycjimmy/semantic-release-action@16ca923e6ccbb50770c415a0ccd43709a8c5f7a4 # v4.2.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
