@@ -40,8 +40,7 @@ var registeredReceivers = make(map[string]reflect.Type)
 // RegisterReceiver takes the type of the receiver argument, without taking
 // the value into the account. So do NOT enter any data to the second argument
 // and only call it like:
-//
-//	RegisterReceiver("somename", &MyReceiverType{})
+//     RegisterReceiver("somename", &MyReceiverType{})
 //
 // After that, when a '<custom>' config tag with this name is used,
 // a receiver of the specified type would be instantiated. Check
