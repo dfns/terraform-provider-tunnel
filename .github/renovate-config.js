@@ -9,6 +9,7 @@ module.exports = {
   gitAuthor: "dfns-github-bot <infra@dfns.co>",
   onboarding: false,
   platform: "github",
+  postUpdateOptions: ["gomodTidy"],
   prConcurrentLimit: 0,
   prHourlyLimit: 0,
   requireConfig: "optional",
