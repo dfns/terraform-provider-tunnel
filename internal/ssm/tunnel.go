@@ -110,7 +110,7 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 
 	args := []string{
 		"session-manager-plugin",
-		DEFAULT_SSM_ENV_NAME,
+		os.Getenv(DEFAULT_SSM_ENV_NAME),
 		cfg.SSMRegion,
 		"StartSession",
 		cfg.SSMProfile,
