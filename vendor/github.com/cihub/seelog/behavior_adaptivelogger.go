@@ -104,9 +104,8 @@ func (asnAdaptiveLogger *asyncAdaptiveLogger) processItem() (closed bool, itemCo
 
 // I = m + (C - Min(c, C)) / C * (M - m) =>
 // I = m + cDiff * mDiff,
-//
-//	cDiff = (C - Min(c, C)) / C)
-//	mDiff = (M - m)
+// 		cDiff = (C - Min(c, C)) / C)
+//		mDiff = (M - m)
 func (asnAdaptiveLogger *asyncAdaptiveLogger) calcAdaptiveInterval(msgCount int) time.Duration {
 	critCountF := float64(asnAdaptiveLogger.criticalMsgCount)
 	cDiff := (critCountF - math.Min(float64(msgCount), critCountF)) / critCountF
