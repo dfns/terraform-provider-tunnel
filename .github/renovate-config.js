@@ -17,6 +17,13 @@ module.exports = {
     enabled: false,
     schedule: null,
   },
-  packageRules: [],
+  packageRules: [
+    {
+      groupName: "aws-sdk-go-v2 packages",
+      groupSlug: "aws-sdk-go-v2",
+      matchDatasources: ["go"],
+      matchPackageNames: ["github.com/aws/aws-sdk-go-v2/**"],
+    },
+  ],
   customManagers: [],
 };
