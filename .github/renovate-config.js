@@ -22,7 +22,10 @@ module.exports = {
       groupName: "aws-sdk-go-v2 packages",
       groupSlug: "aws-sdk-go-v2",
       matchDatasources: ["go"],
-      matchPackageNames: ["github.com/aws/aws-sdk-go-v2/**"],
+      matchPackageNames: [
+        "github.com/aws/aws-sdk-go-v2**",
+        "github.com/aws/smithy-go",
+      ],
     },
   ],
   customManagers: [],
