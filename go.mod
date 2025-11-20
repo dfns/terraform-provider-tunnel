@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.24
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.40.2
-	github.com/aws/session-manager-plugin v0.0.0-20241119210807-82dc72922492
+	github.com/aws/session-manager-plugin v0.0.0-20251119232423-83812b6d1d99
 	github.com/aws/smithy-go v1.23.2
 	github.com/hashicorp/terraform-plugin-framework v1.16.1
 	github.com/rgzr/sshtun v1.2.2
