@@ -42,6 +42,7 @@ func (p *TunnelProvider) DataSources(ctx context.Context) []func() datasource.Da
 	return []func() datasource.DataSource{
 		NewSSHDataSource,
 		NewSSMDataSource,
+		NewKubernetesDataSource,
 	}
 }
 
@@ -49,6 +50,7 @@ func (p *TunnelProvider) EphemeralResources(ctx context.Context) []func() epheme
 	return []func() ephemeral.EphemeralResource{
 		NewSSHEphemeral,
 		NewSSMEphemeral,
+		NewKubernetesEphemeral,
 	}
 }
 
