@@ -6,16 +6,17 @@ description: |-
 
 # Tunnel Provider
 
-The Tunnel provider is used to manage local network tunnels. This enables users to
-securely access and manage remote servers (databases, web servers, etc.) in private
-networks without needing to open additional ports to the outside networks.
+The Tunnel provider manages local network tunnels, enabling secure access to remote servers (databases, web servers, etc.) within private networks without exposing additional ports to the public internet.
+
+It facilitates port forwarding (similar to `kubectl port-forward` or `ssh -L`).
 
 The provider is compatible with HashiCorp Cloud Platform (HCP)
 
 ## Available tunnel types
 
-- [AWS Systems Manager (SSM)](https://docs.aws.amazon.com/systems-manager/latest/userguide/)
-- [SSH Tunneling](https://www.ssh.com/academy/ssh/tunneling)
+- [AWS Systems Manager (SSM)](#aws-systems-manager-ssm)
+- [SSH Tunneling](#ssh-tunneling)
+- [Kubernetes Port Forwarding](#kubernetes-port-forwarding)
 
 ## Example Usage
 
@@ -29,11 +30,51 @@ The provider is compatible with HashiCorp Cloud Platform (HCP)
 
 ```terraform
 data "tunnel_ssm" "eks" {
-  target_host  = "https://eks-cluster.region.eks.amazonaws.com"
+  target_host  = "eks-cluster.region.eks.amazonaws.com"
   target_port  = 443
   ssm_instance = "i-instanceid"
   ssm_region   = "us-east-1"
 }
+
+data "tunnel_ssh" "rds" {
+  target_host = "rds-cluster.region.rds.amazonaws.com"
+  target_port = 5432
+  ssh_host    = "bastion.example.com"
+  ssh_user    = "ec2-user"
+}
+
+data "tunnel_kubernetes" "service" {
+  service_name = "my-service"
+  namespace    = "default"
+  target_port  = 80
+  kubernetes = {
+    config_path    = "~/.kube/config"
+    config_context = "my-context"
+  }
+}
 ```
+
+## Tunnel Details
+
+### AWS Systems Manager (SSM)
+
+Establishes a secure tunnel to a remote host using [AWS Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html).
+This method requires the SSM Agent to be installed and correctly configured with IAM permissions on the target instance.
+
+{{tffile "examples/data-sources/tunnel_ssm/data-source.tf"}}
+
+### SSH Tunneling
+
+Establishes a standard SSH tunnel via a bastion host to reach the target destination.
+This provider uses a built-in SSH client and requires valid SSH credentials (key-based, password, etc.) to the bastion.
+
+{{tffile "examples/data-sources/tunnel_ssh/data-source.tf"}}
+
+### Kubernetes Port Forwarding
+
+Establishes a port-forwarding session to a service or pod within a Kubernetes cluster directly via the Kubernetes API.
+This provider interacts directly with the Kubernetes API, supporting standard kubeconfig authentication.
+
+{{tffile "examples/data-sources/tunnel_kubernetes/data-source.tf"}}
 
 {{- /* No schema in this provider, so no need for this: .SchemaMarkdown | trimspace */ -}}

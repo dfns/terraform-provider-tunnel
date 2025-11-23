@@ -2,20 +2,24 @@ terraform {
   required_providers {
     tunnel = {
       source  = "dfns/tunnel"
-      version = ">= 1.1.0"
+      version = ">= 1.3.0"
     }
   }
 }
 
 ephemeral "tunnel_ssm" "eks" {
-  target_host  = "https://eks-cluster.region.eks.amazonaws.com"
+  target_host  = "eks-cluster.region.eks.amazonaws.com"
   target_port  = 443
   ssm_instance = "i-instanceid"
   ssm_region   = "us-east-1"
 }
 
 provider "kubernetes" {
-  host = "https://${ephemeral.tunnel_ssm.eks.local_host}:${ephemeral.tunnel_ssm.eks.local_port}"
+  host = format(
+    "https://%s:%s",
+    ephemeral.tunnel_ssm.eks.local_host,
+    ephemeral.tunnel_ssm.eks.local_port,
+  )
 
   tls_server_name = "eks-cluster.region.eks.amazonaws.com"
 

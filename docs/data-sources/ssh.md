@@ -21,7 +21,11 @@ data "tunnel_ssh" "k8s" {
 }
 
 provider "kubernetes" {
-  host = "https://${data.tunnel_ssh.k8s.local_host}:${data.tunnel_ssh.k8s.local_port}"
+  host = format(
+    "https://%s:%s",
+    data.tunnel_ssh.k8s.local_host,
+    data.tunnel_ssh.k8s.local_port,
+  )
 
   client_certificate     = file("~/.kube/client-cert.pem")
   client_key             = file("~/.kube/client-key.pem")

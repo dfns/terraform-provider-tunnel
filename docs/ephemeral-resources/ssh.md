@@ -21,7 +21,11 @@ ephemeral "tunnel_ssh" "k8s" {
 }
 
 provider "kubernetes" {
-  host = "https://${ephemeral.tunnel_ssh.k8s.local_host}:${ephemeral.tunnel_ssh.k8s.local_port}"
+  host = format(
+    "https://%s:%s",
+    ephemeral.tunnel_ssh.k8s.local_host,
+    ephemeral.tunnel_ssh.k8s.local_port,
+  )
 
   client_certificate     = file("~/.kube/client-cert.pem")
   client_key             = file("~/.kube/client-key.pem")
