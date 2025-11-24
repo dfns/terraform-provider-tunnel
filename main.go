@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 
+	k8s "github.com/dfns/terraform-provider-tunnel/internal/kubernetes"
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/provider"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssh"
@@ -64,6 +65,8 @@ func StartTunnel(tun string) error {
 		return ssh.StartRemoteTunnel(context.Background(), cfgJson, parentPid)
 	case ssm.TunnelType:
 		return ssm.StartRemoteTunnel(context.Background(), cfgJson, parentPid)
+	case k8s.TunnelType:
+		return k8s.StartRemoteTunnel(context.Background(), cfgJson, parentPid)
 	default:
 		return errors.New("unknown tunnel type")
 	}

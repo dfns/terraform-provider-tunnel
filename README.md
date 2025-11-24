@@ -5,16 +5,17 @@
 [![Terraform Downloads](https://img.shields.io/terraform/provider/dt/5739?logo=terraform&logoColor=white&color=%23844FBA)](https://registry.terraform.io/providers/dfns/tunnel)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dfns/terraform-provider-tunnel/total?logo=github)](https://github.com/dfns/terraform-provider-tunnel/releases)
 
-The Tunnel provider is used to manage local network tunnels. This enables users to
-securely access and manage remote servers (databases, web servers, etc.) in private
-networks without needing to open additional ports to the outside networks.
+The Tunnel provider manages local network tunnels, enabling secure access to remote servers (databases, web servers, etc.) within private networks without exposing additional ports to the public internet.
+
+It facilitates port forwarding (similar to `kubectl port-forward` or `ssh -L`).
 
 The provider is compatible with HashiCorp Cloud Platform (HCP)
 
 ## Available tunnel types
 
-- [AWS Systems Manager (SSM)](https://docs.aws.amazon.com/systems-manager/latest/userguide/)
-- [SSH Tunneling](https://www.ssh.com/academy/ssh/tunneling)
+- [AWS Systems Manager (SSM)](#aws-systems-manager-ssm)
+- [SSH Tunneling](#ssh-tunneling)
+- [Kubernetes Port Forwarding](#kubernetes-port-forwarding)
 
 ## Example Usage
 
@@ -27,20 +28,41 @@ terraform {
   required_providers {
     tunnel = {
       source  = "dfns/tunnel"
-      version = ">= 1.1.0"
+      version = ">= 1.3.0"
     }
   }
 }
 
 ephemeral "tunnel_ssm" "eks" {
-  target_host  = "https://eks-cluster.region.eks.amazonaws.com"
+  target_host  = "eks-cluster.region.eks.amazonaws.com"
   target_port  = 443
   ssm_instance = "i-instanceid"
   ssm_region   = "us-east-1"
 }
 
+ephemeral "tunnel_ssh" "rds" {
+  target_host = "rds-cluster.region.rds.amazonaws.com"
+  target_port = 5432
+  ssh_host    = "bastion.example.com"
+  ssh_user    = "ec2-user"
+}
+
+ephemeral "tunnel_kubernetes" "service" {
+  service_name = "my-service"
+  namespace    = "default"
+  target_port  = 80
+  kubernetes = {
+    config_path    = "~/.kube/config"
+    config_context = "my-context"
+  }
+}
+
 provider "kubernetes" {
-  host = "https://${ephemeral.tunnel_ssm.eks.local_host}:${ephemeral.tunnel_ssm.eks.local_port}"
+  host = format(
+    "https://%s:%s",
+    ephemeral.tunnel_ssm.eks.local_host,
+    ephemeral.tunnel_ssm.eks.local_port,
+  )
 
   tls_server_name = "eks-cluster.region.eks.amazonaws.com"
 
@@ -54,12 +76,46 @@ provider "kubernetes" {
 
 ```terraform
 data "tunnel_ssm" "eks" {
-  target_host  = "https://eks-cluster.region.eks.amazonaws.com"
+  target_host  = "eks-cluster.region.eks.amazonaws.com"
   target_port  = 443
   ssm_instance = "i-instanceid"
   ssm_region   = "us-east-1"
 }
+
+data "tunnel_ssh" "rds" {
+  target_host = "rds-cluster.region.rds.amazonaws.com"
+  target_port = 5432
+  ssh_host    = "bastion.example.com"
+  ssh_user    = "ec2-user"
+}
+
+data "tunnel_kubernetes" "service" {
+  service_name = "my-service"
+  namespace    = "default"
+  target_port  = 80
+  kubernetes = {
+    config_path    = "~/.kube/config"
+    config_context = "my-context"
+  }
+}
 ```
+
+## Tunnel Details
+
+### AWS Systems Manager (SSM)
+
+Establishes a secure tunnel to a remote host using [AWS Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html).
+This method requires the SSM Agent to be installed and correctly configured with IAM permissions on the target instance.
+
+### SSH Tunneling
+
+Establishes a standard SSH tunnel via a bastion host to reach the target destination.
+This provider uses a built-in SSH client and requires valid SSH credentials (key-based, password, etc.) to the bastion.
+
+### Kubernetes Port Forwarding
+
+Establishes a port-forwarding session to a service or pod within a Kubernetes cluster directly via the Kubernetes API.
+This provider interacts directly with the Kubernetes API, supporting standard kubeconfig authentication.
 
 ## Requirements
 
