@@ -44,6 +44,9 @@ provider "kubernetes" {
 
 ### Optional
 
+- `ssh_key` (String, Sensitive) The path to the private key file or the private key content to use for the SSH connection
+- `ssh_key_passphrase` (String, Sensitive) The passphrase for the private key file
+- `ssh_password` (String, Sensitive) The password to use for the SSH connection
 - `ssh_port` (Number) The port number of the SSH bastion host
 - `ssh_user` (String) The username to use for the SSH connection
 

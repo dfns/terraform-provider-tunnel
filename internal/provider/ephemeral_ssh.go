@@ -25,13 +25,16 @@ type SSHEphemeral struct{}
 
 // SSHEphemeralModel describes the data source data model.
 type SSHEphemeralModel struct {
-	LocalHost  types.String `tfsdk:"local_host"`
-	LocalPort  types.Int64  `tfsdk:"local_port"`
-	SSHHost    types.String `tfsdk:"ssh_host"`
-	SSHPort    types.Int64  `tfsdk:"ssh_port"`
-	SSHUser    types.String `tfsdk:"ssh_user"`
-	TargetHost types.String `tfsdk:"target_host"`
-	TargetPort types.Int64  `tfsdk:"target_port"`
+	LocalHost        types.String `tfsdk:"local_host"`
+	LocalPort        types.Int64  `tfsdk:"local_port"`
+	SSHHost          types.String `tfsdk:"ssh_host"`
+	SSHKey           types.String `tfsdk:"ssh_key"`
+	SSHKeyPassphrase types.String `tfsdk:"ssh_key_passphrase"`
+	SSHPassword      types.String `tfsdk:"ssh_password"`
+	SSHPort          types.Int64  `tfsdk:"ssh_port"`
+	SSHUser          types.String `tfsdk:"ssh_user"`
+	TargetHost       types.String `tfsdk:"target_host"`
+	TargetPort       types.Int64  `tfsdk:"target_port"`
 }
 
 func (d *SSHEphemeral) Metadata(ctx context.Context, req ephemeral.MetadataRequest, resp *ephemeral.MetadataResponse) {
@@ -66,7 +69,21 @@ func (d *SSHEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, 
 				Optional:            true,
 				Computed:            true,
 			},
-
+			"ssh_password": schema.StringAttribute{
+				MarkdownDescription: "The password to use for the SSH connection",
+				Optional:            true,
+				Sensitive:           true,
+			},
+			"ssh_key": schema.StringAttribute{
+				MarkdownDescription: "The path to the private key file or the private key content to use for the SSH connection",
+				Optional:            true,
+				Sensitive:           true,
+			},
+			"ssh_key_passphrase": schema.StringAttribute{
+				MarkdownDescription: "The passphrase for the private key file",
+				Optional:            true,
+				Sensitive:           true,
+			},
 			// Computed attributes
 			"local_host": schema.StringAttribute{
 				MarkdownDescription: "The DNS name or IP address of the local host",
@@ -113,12 +130,15 @@ func (d *SSHEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	}
 
 	cmd, err := ssh.ForkRemoteTunnel(ctx, ssh.TunnelConfig{
-		LocalPort:  localPort,
-		SSHHost:    data.SSHHost.ValueString(),
-		SSHPort:    int(data.SSHPort.ValueInt64()),
-		SSHUser:    data.SSHUser.ValueString(),
-		TargetHost: data.TargetHost.ValueString(),
-		TargetPort: int(data.TargetPort.ValueInt64()),
+		LocalPort:        localPort,
+		SSHHost:          data.SSHHost.ValueString(),
+		SSHKey:           data.SSHKey.ValueString(),
+		SSHKeyPassphrase: data.SSHKeyPassphrase.ValueString(),
+		SSHPassword:      data.SSHPassword.ValueString(),
+		SSHPort:          int(data.SSHPort.ValueInt64()),
+		SSHUser:          data.SSHUser.ValueString(),
+		TargetHost:       data.TargetHost.ValueString(),
+		TargetPort:       int(data.TargetPort.ValueInt64()),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to fork tunnel process", fmt.Sprintf("Error: %s", err))

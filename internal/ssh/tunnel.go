@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
@@ -21,12 +22,15 @@ import (
 var TunnelType string = "ssh"
 
 type TunnelConfig struct {
-	SSHHost    string
-	SSHPort    int
-	SSHUser    string
-	TargetHost string
-	TargetPort int
-	LocalPort  int
+	LocalPort        int
+	SSHHost          string
+	SSHKey           string
+	SSHKeyPassphrase string
+	SSHPassword      string
+	SSHPort          int
+	SSHUser          string
+	TargetHost       string
+	TargetPort       int
 }
 
 func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) {
@@ -88,6 +92,26 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 	sshTun.SetPort(cfg.SSHPort)
 	sshTun.SetUser(cfg.SSHUser)
 	sshTun.SetRemoteHost(cfg.TargetHost)
+
+	if cfg.SSHPassword != "" {
+		sshTun.SetPassword(cfg.SSHPassword)
+	}
+
+	if cfg.SSHKey != "" {
+		if _, err := os.Stat(cfg.SSHKey); err == nil {
+			if cfg.SSHKeyPassphrase != "" {
+				sshTun.SetEncryptedKeyFile(cfg.SSHKey, cfg.SSHKeyPassphrase)
+			} else {
+				sshTun.SetKeyFile(cfg.SSHKey)
+			}
+		} else {
+			if cfg.SSHKeyPassphrase != "" {
+				sshTun.SetEncryptedKeyReader(strings.NewReader(cfg.SSHKey), cfg.SSHKeyPassphrase)
+			} else {
+				sshTun.SetKeyReader(strings.NewReader(cfg.SSHKey))
+			}
+		}
+	}
 
 	sshTun.SetTunneledConnState(func(tun *sshtun.SSHTun, state *sshtun.TunneledConnState) {
 		log.Printf("tunnel state: %+v", state)
