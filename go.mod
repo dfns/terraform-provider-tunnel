@@ -17,7 +17,7 @@ require (
 	github.com/hashicorp/terraform-plugin-framework v1.17.0
 	github.com/rgzr/sshtun v1.2.3
 	github.com/shirou/gopsutil/v4 v4.25.11
-	k8s.io/apimachinery v0.34.2
+	k8s.io/apimachinery v0.34.3
 	k8s.io/client-go v0.34.2
 )
 
