@@ -61,7 +61,6 @@ func (d *KubernetesDataSource) Schema(ctx context.Context, req datasource.Schema
 			},
 			"kubernetes": schema.SingleNestedAttribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "Kubernetes Configuration",
 				Attributes: map[string]schema.Attribute{
 					"host": schema.StringAttribute{
@@ -74,6 +73,7 @@ func (d *KubernetesDataSource) Schema(ctx context.Context, req datasource.Schema
 					},
 					"password": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "The password to use for HTTP basic authentication when accessing the Kubernetes master endpoint.",
 					},
 					"insecure": schema.BoolAttribute{
@@ -86,14 +86,17 @@ func (d *KubernetesDataSource) Schema(ctx context.Context, req datasource.Schema
 					},
 					"client_certificate": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "PEM-encoded client certificate for TLS authentication.",
 					},
 					"client_key": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "PEM-encoded client certificate key for TLS authentication.",
 					},
 					"cluster_ca_certificate": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "PEM-encoded root certificates bundle for TLS authentication.",
 					},
 					"config_paths": schema.ListAttribute{
@@ -119,6 +122,7 @@ func (d *KubernetesDataSource) Schema(ctx context.Context, req datasource.Schema
 					},
 					"token": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "Token to authenticate a service account.",
 					},
 					"proxy_url": schema.StringAttribute{
@@ -139,11 +143,13 @@ func (d *KubernetesDataSource) Schema(ctx context.Context, req datasource.Schema
 							},
 							"env": schema.MapAttribute{
 								Optional:    true,
+								Sensitive:   true,
 								ElementType: types.StringType,
 								Description: "Environment variables for the exec plugin",
 							},
 							"args": schema.ListAttribute{
 								Optional:    true,
+								Sensitive:   true,
 								ElementType: types.StringType,
 								Description: "Arguments for the exec plugin",
 							},
@@ -244,9 +250,6 @@ func (d *KubernetesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		resp.Diagnostics.AddError("Failed to start tunnel", err.Error())
 		return
 	}
-
-	// Clear the sensitive Kubernetes configuration from the state
-	data.Kubernetes = nil
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

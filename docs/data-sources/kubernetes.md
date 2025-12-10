@@ -58,9 +58,9 @@ resource "postgresql_database" "my_db" {
 
 Optional:
 
-- `client_certificate` (String) PEM-encoded client certificate for TLS authentication.
-- `client_key` (String) PEM-encoded client certificate key for TLS authentication.
-- `cluster_ca_certificate` (String) PEM-encoded root certificates bundle for TLS authentication.
+- `client_certificate` (String, Sensitive) PEM-encoded client certificate for TLS authentication.
+- `client_key` (String, Sensitive) PEM-encoded client certificate key for TLS authentication.
+- `cluster_ca_certificate` (String, Sensitive) PEM-encoded root certificates bundle for TLS authentication.
 - `config_context` (String) Context to choose from the config file. Can be sourced from KUBE_CTX.
 - `config_context_auth_info` (String) Authentication info context of the kube config (name of the kubeconfig user, --user flag in kubectl). Can be sourced from KUBE_CTX_AUTH_INFO.
 - `config_context_cluster` (String) Cluster context of the kube config (name of the kubeconfig cluster, --cluster flag in kubectl). Can be sourced from KUBE_CTX_CLUSTER.
@@ -69,10 +69,10 @@ Optional:
 - `exec` (Attributes) Exec configuration for Kubernetes authentication (see [below for nested schema](#nestedatt--kubernetes--exec))
 - `host` (String) The hostname (in form of URI) of kubernetes master
 - `insecure` (Boolean) Whether server should be accessed without verifying the TLS certificate.
-- `password` (String) The password to use for HTTP basic authentication when accessing the Kubernetes master endpoint.
+- `password` (String, Sensitive) The password to use for HTTP basic authentication when accessing the Kubernetes master endpoint.
 - `proxy_url` (String) URL to the proxy to be used for all API requests.
 - `tls_server_name` (String) Server name passed to the server for SNI and is used in the client to check server certificates against.
-- `token` (String) Token to authenticate a service account.
+- `token` (String, Sensitive) Token to authenticate a service account.
 - `username` (String) The username to use for HTTP basic authentication when accessing the Kubernetes master endpoint
 
 <a id="nestedatt--kubernetes--exec"></a>
@@ -85,5 +85,5 @@ Required:
 
 Optional:
 
-- `args` (List of String) Arguments for the exec plugin
-- `env` (Map of String) Environment variables for the exec plugin
+- `args` (List of String, Sensitive) Arguments for the exec plugin
+- `env` (Map of String, Sensitive) Environment variables for the exec plugin

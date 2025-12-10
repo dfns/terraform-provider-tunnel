@@ -89,7 +89,6 @@ func (d *KubernetesEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRe
 			},
 			"kubernetes": schema.SingleNestedAttribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "Kubernetes Configuration",
 				Attributes: map[string]schema.Attribute{
 					"host": schema.StringAttribute{
@@ -102,6 +101,7 @@ func (d *KubernetesEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRe
 					},
 					"password": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "The password to use for HTTP basic authentication when accessing the Kubernetes master endpoint.",
 					},
 					"insecure": schema.BoolAttribute{
@@ -114,14 +114,17 @@ func (d *KubernetesEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRe
 					},
 					"client_certificate": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "PEM-encoded client certificate for TLS authentication.",
 					},
 					"client_key": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "PEM-encoded client certificate key for TLS authentication.",
 					},
 					"cluster_ca_certificate": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "PEM-encoded root certificates bundle for TLS authentication.",
 					},
 					"config_paths": schema.ListAttribute{
@@ -147,6 +150,7 @@ func (d *KubernetesEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRe
 					},
 					"token": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "Token to authenticate a service account.",
 					},
 					"proxy_url": schema.StringAttribute{
@@ -167,11 +171,13 @@ func (d *KubernetesEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRe
 							},
 							"env": schema.MapAttribute{
 								Optional:    true,
+								Sensitive:   true,
 								ElementType: types.StringType,
 								Description: "Environment variables for the exec plugin",
 							},
 							"args": schema.ListAttribute{
 								Optional:    true,
+								Sensitive:   true,
 								ElementType: types.StringType,
 								Description: "Arguments for the exec plugin",
 							},
@@ -272,9 +278,6 @@ func (d *KubernetesEphemeral) Open(ctx context.Context, req ephemeral.OpenReques
 		resp.Diagnostics.AddError("Failed to start tunnel", err.Error())
 		return
 	}
-
-	// Clear the sensitive Kubernetes configuration from the result
-	data.Kubernetes = nil
 
 	resp.Diagnostics.Append(resp.Result.Set(ctx, &data)...)
 	resp.Private.SetKey(ctx, "tunnel_pid", []byte(strconv.Itoa(cmd.Process.Pid)))
