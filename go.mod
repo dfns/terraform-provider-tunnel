@@ -2,7 +2,7 @@ module github.com/dfns/terraform-provider-tunnel
 
 go 1.25.0
 
-toolchain go1.25.5
+toolchain go1.25.6
 
 replace github.com/aws/session-manager-plugin => github.com/formalco/session-manager-plugin v0.0.0-20250131230350-ea0a42ddcaf7
 
