@@ -3,6 +3,7 @@ package libs
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"runtime"
 	"syscall"
@@ -73,4 +74,42 @@ func Interrupt(pid int) error {
 	}
 
 	return nil
+}
+
+func WaitForPort(pid int, host string, port string) error {
+	timeout := 30 * time.Second
+	deadline := time.Now().Add(timeout)
+	addr := net.JoinHostPort(host, port)
+	for time.Now().Before(deadline) {
+		if err := CheckProcessExists(pid); err != nil {
+			return fmt.Errorf("process exited unexpectedly")
+		}
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		if err == nil {
+			conn.Close()
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("port %s not accepting connections after %s", port, timeout)
+}
+
+func SignalReady(path string) error {
+	return os.WriteFile(path, []byte("ready"), 0644)
+}
+
+func WaitForReadyFile(pid int, path string) error {
+	timeout := 30 * time.Second
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := CheckProcessExists(pid); err != nil {
+			return fmt.Errorf("process exited unexpectedly")
+		}
+		if _, err := os.Stat(path); err == nil {
+			os.Remove(path)
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("tunnel not ready after %s", timeout)
 }
