@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -89,10 +88,8 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 		return nil, err
 	}
 
-	time.Sleep(2 * time.Second)
-
-	if err = libs.CheckProcessExists(cmd.Process.Pid); err != nil {
-		return nil, fmt.Errorf("tunnel process failed to start. check %s for more information", tunnelLogPath)
+	if err = libs.WaitForPort(cmd.Process.Pid, cfg.LocalHost, strconv.Itoa(cfg.LocalPort)); err != nil {
+		return nil, fmt.Errorf("%w. check %s for more information", err, tunnelLogPath)
 	}
 
 	return cmd, nil

@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -76,10 +75,8 @@ func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) 
 		return nil, err
 	}
 
-	time.Sleep(5 * time.Second)
-
-	if err = libs.CheckProcessExists(cmd.Process.Pid); err != nil {
-		return nil, fmt.Errorf("tunnel process failed to start. check %s for more information", tunnelLogPath)
+	if err = libs.WaitForPort(cmd.Process.Pid, "localhost", cfg.LocalPort); err != nil {
+		return nil, fmt.Errorf("%w. check %s for more information", err, tunnelLogPath)
 	}
 
 	return cmd, nil
