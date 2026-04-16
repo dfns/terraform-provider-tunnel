@@ -12,6 +12,7 @@ module.exports = {
   postUpdateOptions: ["gomodTidy"],
   prConcurrentLimit: 0,
   prHourlyLimit: 0,
+  semanticCommits: "enabled",
   requireConfig: "optional",
   lockFileMaintenance: {
     enabled: false,
