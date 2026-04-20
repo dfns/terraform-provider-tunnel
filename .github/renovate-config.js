@@ -12,6 +12,8 @@ module.exports = {
   postUpdateOptions: ["gomodTidy"],
   prConcurrentLimit: 0,
   prHourlyLimit: 0,
+  minimumReleaseAge: "7 days",
+  internalChecksFilter: "strict",
   semanticCommits: "enabled",
   requireConfig: "optional",
   lockFileMaintenance: {
