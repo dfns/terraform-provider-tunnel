@@ -6,7 +6,6 @@ module.exports = {
   branchPrefix: "renovate/",
   dryRun: process.env.RENOVATE_REPOSITORIES ? null : "full",
   enabledManagers: ["gomod", "github-actions"],
-  gitAuthor: "dfns-github-bot <infra@dfns.co>",
   onboarding: false,
   platform: "github",
   postUpdateOptions: ["gomodTidy"],
