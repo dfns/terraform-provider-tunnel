@@ -106,7 +106,6 @@ func WaitForReadyFile(pid int, path string) error {
 			return fmt.Errorf("process exited unexpectedly")
 		}
 		if _, err := os.Stat(path); err == nil {
-			os.Remove(path)
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
