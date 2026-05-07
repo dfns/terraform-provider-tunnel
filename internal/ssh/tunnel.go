@@ -48,8 +48,10 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 	// Prepare the command
 	cmd := exec.Command(os.Args[0], strconv.Itoa(os.Getppid()))
 
-	// Create a temp file path for the ready signal (use PID for uniqueness)
-	readyFilePath := filepath.Join(os.TempDir(), fmt.Sprintf("ssh-tunnel-ready-%d", os.Getpid()))
+	// LocalPort is unique per resource, giving each concurrent fork its own ready file.
+	readyFilePath := filepath.Join(os.TempDir(), fmt.Sprintf("ssh-tunnel-ready-%d-%d", os.Getpid(), cfg.LocalPort))
+	os.Remove(readyFilePath)
+	defer os.Remove(readyFilePath)
 
 	// Append ssh tunnel config environment variable to pass parameters to the child process
 	cmd.Env = append(
