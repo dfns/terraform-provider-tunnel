@@ -39,8 +39,6 @@ provider "kubernetes" {
 ### Required
 
 - `ssh_host` (String) The DNS name or IP address of the SSH bastion host
-- `target_host` (String) The DNS name or IP address of the remote host
-- `target_port` (Number) The port number of the remote host
 
 ### Optional
 
@@ -49,6 +47,9 @@ provider "kubernetes" {
 - `ssh_password` (String, Sensitive) The password to use for the SSH connection
 - `ssh_port` (Number) The port number of the SSH bastion host
 - `ssh_user` (String) The username to use for the SSH connection
+- `target_host` (String) The DNS name or IP address of the remote host. Required when `target_port` is set; ignored when `target_socket` is set.
+- `target_port` (Number) The TCP port of the remote host. Mutually exclusive with `target_socket`.
+- `target_socket` (String) Path of a unix domain socket on the SSH bastion to forward to. Mutually exclusive with `target_port`.
 
 ### Read-Only
 

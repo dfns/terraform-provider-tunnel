@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/user"
 
@@ -11,6 +12,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+func validateSSHTarget(targetHost, targetSocket types.String, targetPort types.Int64) error {
+	hasPort := !targetPort.IsNull()
+	hasSocket := !targetSocket.IsNull() && targetSocket.ValueString() != ""
+	switch {
+	case hasPort && hasSocket:
+		return errors.New("`target_port` and `target_socket` are mutually exclusive")
+	case !hasPort && !hasSocket:
+		return errors.New("one of `target_port` or `target_socket` must be set")
+	case hasPort && (targetHost.IsNull() || targetHost.ValueString() == ""):
+		return errors.New("`target_host` is required when `target_port` is set")
+	}
+	return nil
+}
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ datasource.DataSource = &SSHDataSource{}
@@ -34,6 +49,7 @@ type SSHDataSourceModel struct {
 	SSHUser          types.String `tfsdk:"ssh_user"`
 	TargetHost       types.String `tfsdk:"target_host"`
 	TargetPort       types.Int64  `tfsdk:"target_port"`
+	TargetSocket     types.String `tfsdk:"target_socket"`
 }
 
 func (d *SSHDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -45,14 +61,17 @@ func (d *SSHDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 		MarkdownDescription: "Create a local SSH tunnel to a remote host",
 
 		Attributes: map[string]schema.Attribute{
-			// Required attributes
 			"target_host": schema.StringAttribute{
-				MarkdownDescription: "The DNS name or IP address of the remote host",
-				Required:            true,
+				MarkdownDescription: "The DNS name or IP address of the remote host. Required when `target_port` is set; ignored when `target_socket` is set.",
+				Optional:            true,
 			},
 			"target_port": schema.Int64Attribute{
-				MarkdownDescription: "The port number of the remote host",
-				Required:            true,
+				MarkdownDescription: "The TCP port of the remote host. Mutually exclusive with `target_socket`.",
+				Optional:            true,
+			},
+			"target_socket": schema.StringAttribute{
+				MarkdownDescription: "Path of a unix domain socket on the SSH bastion to forward to. Mutually exclusive with `target_port`.",
+				Optional:            true,
 			},
 			"ssh_host": schema.StringAttribute{
 				MarkdownDescription: "The DNS name or IP address of the SSH bastion host",
@@ -106,6 +125,11 @@ func (d *SSHDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 		return
 	}
 
+	if err := validateSSHTarget(data.TargetHost, data.TargetSocket, data.TargetPort); err != nil {
+		resp.Diagnostics.AddError("Invalid target configuration", err.Error())
+		return
+	}
+
 	// Get a free port for the local tunnel
 	localPort, err := libs.GetFreePort()
 	if err != nil {
@@ -138,6 +162,7 @@ func (d *SSHDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 		SSHUser:          data.SSHUser.ValueString(),
 		TargetHost:       data.TargetHost.ValueString(),
 		TargetPort:       int(data.TargetPort.ValueInt64()),
+		TargetSocket:     data.TargetSocket.ValueString(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to fork tunnel process", fmt.Sprintf("Error: %s", err))
