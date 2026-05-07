@@ -35,6 +35,7 @@ type SSHEphemeralModel struct {
 	SSHUser          types.String `tfsdk:"ssh_user"`
 	TargetHost       types.String `tfsdk:"target_host"`
 	TargetPort       types.Int64  `tfsdk:"target_port"`
+	TargetSocket     types.String `tfsdk:"target_socket"`
 }
 
 func (d *SSHEphemeral) Metadata(ctx context.Context, req ephemeral.MetadataRequest, resp *ephemeral.MetadataResponse) {
@@ -46,14 +47,17 @@ func (d *SSHEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, 
 		MarkdownDescription: "Create a local SSH tunnel to a remote host",
 
 		Attributes: map[string]schema.Attribute{
-			// Required attributes
 			"target_host": schema.StringAttribute{
-				MarkdownDescription: "The DNS name or IP address of the remote host",
-				Required:            true,
+				MarkdownDescription: "The DNS name or IP address of the remote host. Required when `target_port` is set; ignored when `target_socket` is set.",
+				Optional:            true,
 			},
 			"target_port": schema.Int64Attribute{
-				MarkdownDescription: "The port number of the remote host",
-				Required:            true,
+				MarkdownDescription: "The TCP port of the remote host. Mutually exclusive with `target_socket`.",
+				Optional:            true,
+			},
+			"target_socket": schema.StringAttribute{
+				MarkdownDescription: "Path of a unix domain socket on the SSH bastion to forward to. Mutually exclusive with `target_port`.",
+				Optional:            true,
 			},
 			"ssh_host": schema.StringAttribute{
 				MarkdownDescription: "The DNS name or IP address of the SSH bastion host",
@@ -107,6 +111,11 @@ func (d *SSHEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 		return
 	}
 
+	if err := validateSSHTarget(data.TargetHost, data.TargetSocket, data.TargetPort); err != nil {
+		resp.Diagnostics.AddError("Invalid target configuration", err.Error())
+		return
+	}
+
 	// Get a free port for the local tunnel
 	localPort, err := libs.GetFreePort()
 	if err != nil {
@@ -139,6 +148,7 @@ func (d *SSHEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 		SSHUser:          data.SSHUser.ValueString(),
 		TargetHost:       data.TargetHost.ValueString(),
 		TargetPort:       int(data.TargetPort.ValueInt64()),
+		TargetSocket:     data.TargetSocket.ValueString(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to fork tunnel process", fmt.Sprintf("Error: %s", err))

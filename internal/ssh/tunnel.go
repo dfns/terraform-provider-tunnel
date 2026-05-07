@@ -30,6 +30,7 @@ type TunnelConfig struct {
 	SSHUser          string
 	TargetHost       string
 	TargetPort       int
+	TargetSocket     string
 }
 
 func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) {
@@ -39,7 +40,11 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 	}
 
 	// Open a log file for the tunnel
-	tunnelLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("ssh-tunnel-%s-%d.log", cfg.SSHHost, cfg.TargetPort))
+	target := strconv.Itoa(cfg.TargetPort)
+	if cfg.TargetSocket != "" {
+		target = strings.ReplaceAll(cfg.TargetSocket, string(os.PathSeparator), "_")
+	}
+	tunnelLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("ssh-tunnel-%s-%s.log", cfg.SSHHost, target))
 	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
@@ -89,12 +94,20 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 		return err
 	}
 
-	log.Printf("starting tunnel: localhost:%d - %s:%d - %s:%d", cfg.LocalPort, cfg.SSHHost, cfg.SSHPort, cfg.TargetHost, cfg.TargetPort)
+	target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
+	if cfg.TargetSocket != "" {
+		target = cfg.TargetSocket
+	}
+	log.Printf("starting tunnel: localhost:%d - %s:%d - %s", cfg.LocalPort, cfg.SSHHost, cfg.SSHPort, target)
 
 	sshTun := sshtun.New(cfg.LocalPort, cfg.SSHHost, cfg.TargetPort)
 	sshTun.SetPort(cfg.SSHPort)
 	sshTun.SetUser(cfg.SSHUser)
-	sshTun.SetRemoteHost(cfg.TargetHost)
+	if cfg.TargetSocket != "" {
+		sshTun.SetRemoteEndpoint(sshtun.NewUnixEndpoint(cfg.TargetSocket))
+	} else {
+		sshTun.SetRemoteHost(cfg.TargetHost)
+	}
 
 	if cfg.SSHPassword != "" {
 		sshTun.SetPassword(cfg.SSHPassword)
