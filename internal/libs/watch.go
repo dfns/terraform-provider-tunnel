@@ -13,10 +13,6 @@ import (
 )
 
 func WatchProcess(pid int) (err error) {
-	parent, err := ps.NewProcess(int32(pid))
-	if err != nil {
-		return err
-	}
 	child, err := ps.NewProcess(int32(os.Getpid()))
 	if err != nil {
 		return err
@@ -24,7 +20,7 @@ func WatchProcess(pid int) (err error) {
 	// pool for parent process liveliness every 2 seconds
 	go func() {
 		for {
-			_, err := parent.Status()
+			err := CheckProcessExists(pid)
 			if err != nil {
 				log.Printf("parent process exited: %v\n", err)
 				if runtime.GOOS == "windows" {
@@ -44,14 +40,28 @@ func WatchProcess(pid int) (err error) {
 }
 
 func CheckProcessExists(pid int) error {
+  exists, err := ps.PidExists(int32(pid))
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("process died")
+	}
+
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+
 	cmd, err := ps.NewProcess(int32(pid))
 	if err != nil {
 		return err
 	}
+
 	stats, err := cmd.Status()
 	if err != nil {
 		return err
 	}
+
 	if stats[0] == "zombie" {
 		return fmt.Errorf("process died")
 	}
