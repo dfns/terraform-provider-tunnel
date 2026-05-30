@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -48,7 +47,7 @@ func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) 
 	}
 
 	// Open a log file for the tunnel
-	tunnelLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, cfg.TargetPort))
+	tunnelLogPath := libs.TunnelLogPath(fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, cfg.TargetPort))
 	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err

@@ -82,7 +82,7 @@ func WaitForPort(pid int, host string, port string) error {
 	addr := net.JoinHostPort(host, port)
 	for time.Now().Before(deadline) {
 		if err := CheckProcessExists(pid); err != nil {
-			return fmt.Errorf("process exited unexpectedly")
+			return fmt.Errorf("process exited unexpectedly: %w", err)
 		}
 		conn, err := net.DialTimeout("tcp", addr, time.Second)
 		if err == nil {
@@ -103,7 +103,7 @@ func WaitForReadyFile(pid int, path string) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if err := CheckProcessExists(pid); err != nil {
-			return fmt.Errorf("process exited unexpectedly")
+			return fmt.Errorf("process exited unexpectedly: %w", err)
 		}
 		if _, err := os.Stat(path); err == nil {
 			return nil
