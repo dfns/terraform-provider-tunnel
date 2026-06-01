@@ -44,7 +44,7 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 	if cfg.TargetSocket != "" {
 		target = strings.ReplaceAll(cfg.TargetSocket, string(os.PathSeparator), "_")
 	}
-	tunnelLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("ssh-tunnel-%s-%s.log", cfg.SSHHost, target))
+	tunnelLogPath := libs.TunnelLogPath(fmt.Sprintf("ssh-tunnel-%s-%s.log", cfg.SSHHost, target))
 	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err

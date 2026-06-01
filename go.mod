@@ -17,6 +17,7 @@ require (
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/rgzr/sshtun v1.2.3
 	github.com/shirou/gopsutil/v4 v4.26.4
+	golang.org/x/crypto v0.47.0
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.36.1
 )
@@ -83,7 +84,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect

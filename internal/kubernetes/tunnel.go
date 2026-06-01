@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
@@ -63,7 +62,7 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 	}
 
 	// Open a log file for the tunnel
-	tunnelLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("k8s-tunnel-%s-%s-%d.log", cfg.Namespace, cfg.ServiceName, cfg.TargetPort))
+	tunnelLogPath := libs.TunnelLogPath(fmt.Sprintf("k8s-tunnel-%s-%s-%d.log", cfg.Namespace, cfg.ServiceName, cfg.TargetPort))
 	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err

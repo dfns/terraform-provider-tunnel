@@ -1,19 +1,25 @@
 # Terraform Provider testing workflow.
 name: Tests
 
-# This GitHub action runs your tests for each pull request and push.
-# Optionally, you can turn it on using a schedule for regular testing.
+# Runs build/lint, doc generation, unit, integration and end-to-end tests for
+# each pull request and for pushes to main.
 on:
   pull_request:
     paths-ignore:
       - "README.md"
   push:
+    branches:
+      - main
     paths-ignore:
       - "README.md"
 
 # Testing only needs permissions to read the repository contents.
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Ensure project builds before running testing matrix
@@ -35,6 +41,7 @@ jobs:
           version: latest
 
   generate:
+    name: Generate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -52,18 +59,62 @@ jobs:
           git diff --compact-summary --exit-code || \
             (echo; echo "Unexpected difference in directories after code generation. Run 'make generate' command and commit."; exit 1)
 
-  # Run acceptance tests in a matrix with Terraform CLI versions
-  test:
-    name: Terraform Provider Acceptance Tests
+  # Fast, dependency-free unit tests across all packages.
+  unit:
+    name: Unit tests
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+      - run: go mod download
+      - run: go test -v -cover ./...
+
+  # Integration tests for the fork/process-watch primitives. Run on all three
+  # major OSes since the process-signal path (SIGINT vs Terminate) is OS-specific.
+  integration:
+    name: Integration tests (${{ matrix.os }})
+    needs: build
     strategy:
       fail-fast: false
       matrix:
-        # list whatever Terraform versions here you would like to support
-        terraform:
-          - "1.5.*"
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+      - run: go mod download
+      - run: go test -v -tags integration -timeout 120s ./test/integration/
+
+  # End-to-end: build the real provider and drive it through `terraform apply`
+  # against live fixtures, so OS-specific regressions in the fork/process-watch
+  # path cannot merge.
+  #
+  # tunnel_ssh against an in-process SSH bastion + HTTP target. Runs on all three
+  # major OSes since the fork/process-watch path is OS-specific.
+  ssh-e2e:
+    name: SSH tunnel (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -72,10 +123,32 @@ jobs:
           cache: true
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
-          terraform_version: ${{ matrix.terraform }}
+          terraform_version: "1.10.5"
           terraform_wrapper: false
-      - run: go mod download
-      - env:
-          TF_ACC: "1"
-        run: go test -v -cover ./internal/provider/
-        timeout-minutes: 10
+      - run: go test -v -tags e2e -run TestSSHTunnelE2E -timeout 10m ./test/e2e/
+
+  # tunnel_kubernetes against a kind cluster, forwarding to the built-in CoreDNS
+  # metrics endpoint. Linux-only: kind needs a Linux Docker host.
+  k8s-e2e:
+    name: Kubernetes tunnel
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
+      - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          cluster_name: tunnel-e2e
+      - name: Wait for CoreDNS
+        run: kubectl wait --for=condition=Available deploy/coredns -n kube-system --timeout=120s
+      - run: go test -v -tags e2e -run TestKubernetesTunnelE2E -timeout 10m ./test/e2e/
+        env:
+          E2E_KUBE_CONTEXT: kind-tunnel-e2e
