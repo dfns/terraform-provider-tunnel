@@ -21,20 +21,19 @@ func WatchProcess(pid int) (err error) {
 	if err != nil {
 		return err
 	}
-	// pool for parent process liveliness every 2 seconds
+	// poll for parent process liveliness every 2 seconds
 	go func() {
 		for {
-			_, err := parent.Status()
+			running, err := parent.IsRunning()
 			if err != nil {
-				log.Printf("parent process exited: %v\n", err)
-				if runtime.GOOS == "windows" {
-					err = child.Terminate()
-				} else {
-					err = child.SendSignal(syscall.SIGINT)
-				}
+				log.Printf("failed to check parent process: %v\n", err)
+			} else if !running {
+				log.Println("parent process exited")
+				err := terminate(child)
 				if err != nil {
 					log.Printf("failed to terminate process: %v\n", err)
 				}
+				return
 			}
 			time.Sleep(2 * time.Second)
 		}
@@ -48,11 +47,19 @@ func CheckProcessExists(pid int) error {
 	if err != nil {
 		return err
 	}
-	stats, err := cmd.Status()
+	if stats, err := cmd.Status(); err == nil {
+		for _, status := range stats {
+			if status == ps.Zombie {
+				return fmt.Errorf("process died")
+			}
+		}
+		return nil
+	}
+	running, err := cmd.IsRunning()
 	if err != nil {
 		return err
 	}
-	if stats[0] == "zombie" {
+	if !running {
 		return fmt.Errorf("process died")
 	}
 
@@ -64,16 +71,14 @@ func Interrupt(pid int) error {
 	if err != nil {
 		return err
 	}
-	if runtime.GOOS == "windows" {
-		err = cmd.Terminate()
-	} else {
-		err = cmd.SendSignal(syscall.SIGINT)
-	}
-	if err != nil {
-		return err
-	}
+	return terminate(cmd)
+}
 
-	return nil
+func terminate(proc *ps.Process) error {
+	if runtime.GOOS == "windows" {
+		return proc.Terminate()
+	}
+	return proc.SendSignal(syscall.SIGINT)
 }
 
 func WaitForPort(pid int, host string, port string) error {
