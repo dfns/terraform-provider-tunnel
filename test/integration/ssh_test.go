@@ -64,6 +64,7 @@ func TestSSHForkRemoteTunnelLifecycle(t *testing.T) {
 	}
 
 	cmd, err := ssh.ForkRemoteTunnel(context.Background(), ssh.TunnelConfig{
+		LocalHost:  "127.0.0.1", // exercise the configurable bind address
 		LocalPort:  localPort,
 		SSHHost:    "127.0.0.1",
 		SSHPort:    sshPort,
