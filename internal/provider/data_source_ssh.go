@@ -102,13 +102,14 @@ func (d *SSHDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 				Optional:            true,
 				Sensitive:           true,
 			},
-			// Computed attributes
 			"local_host": schema.StringAttribute{
-				MarkdownDescription: "The DNS name or IP address of the local host",
+				MarkdownDescription: "The local address to listen on. Defaults to `localhost`.",
+				Optional:            true,
 				Computed:            true,
 			},
 			"local_port": schema.Int64Attribute{
-				MarkdownDescription: "The local port number to use for the tunnel",
+				MarkdownDescription: "The local port to listen on. If not set, a random free port is chosen.",
+				Optional:            true,
 				Computed:            true,
 			},
 		},
@@ -130,14 +131,19 @@ func (d *SSHDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 		return
 	}
 
-	// Get a free port for the local tunnel
-	localPort, err := libs.GetFreePort()
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
-		return
+	localPort := int(data.LocalPort.ValueInt64())
+	if localPort == 0 {
+		var err error
+		localPort, err = libs.GetFreePort()
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
+			return
+		}
 	}
 
-	data.LocalHost = types.StringValue("localhost")
+	if data.LocalHost.IsNull() {
+		data.LocalHost = types.StringValue("localhost")
+	}
 	data.LocalPort = types.Int64Value(int64(localPort))
 
 	if data.SSHUser.IsNull() {
@@ -152,7 +158,8 @@ func (d *SSHDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 		data.SSHPort = types.Int64Value(22)
 	}
 
-	_, err = ssh.ForkRemoteTunnel(ctx, ssh.TunnelConfig{
+	_, err := ssh.ForkRemoteTunnel(ctx, ssh.TunnelConfig{
+		LocalHost:        data.LocalHost.ValueString(),
 		LocalPort:        localPort,
 		SSHHost:          data.SSHHost.ValueString(),
 		SSHKey:           data.SSHKey.ValueString(),

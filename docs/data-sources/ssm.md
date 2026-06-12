@@ -40,6 +40,7 @@ provider "postgresql" {
 
 ### Optional
 
+- `local_port` (Number) The local port to listen on. If not set, a random free port is chosen.
 - `ssm_profile` (String) AWS profile name as set in credentials files. Can also be set using either the environment variables `AWS_PROFILE` or `AWS_DEFAULT_PROFILE`.
 - `ssm_region` (String) AWS Region where the instance is located. The Region must be set. Can also be set using either the environment variables `AWS_REGION` or `AWS_DEFAULT_REGION`.
 - `ssm_role_arn` (String) ARN of an IAM role to assume.
@@ -47,4 +48,3 @@ provider "postgresql" {
 ### Read-Only
 
 - `local_host` (String) The DNS name or IP address of the local host
-- `local_port` (Number) The local port number to use for the tunnel

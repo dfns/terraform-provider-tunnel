@@ -72,13 +72,14 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 				Computed:            true,
 			},
 
+			"local_port": schema.Int64Attribute{
+				MarkdownDescription: "The local port to listen on. If not set, a random free port is chosen.",
+				Optional:            true,
+				Computed:            true,
+			},
 			// Computed attributes
 			"local_host": schema.StringAttribute{
 				MarkdownDescription: "The DNS name or IP address of the local host",
-				Computed:            true,
-			},
-			"local_port": schema.Int64Attribute{
-				MarkdownDescription: "The local port number to use for the tunnel",
 				Computed:            true,
 			},
 		},
@@ -95,11 +96,14 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 		return
 	}
 
-	// Get a free port for the local tunnel
-	localPort, err := libs.GetFreePort()
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
-		return
+	localPort := int(data.LocalPort.ValueInt64())
+	if localPort == 0 {
+		var err error
+		localPort, err = libs.GetFreePort()
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
+			return
+		}
 	}
 
 	// Hardcoded in session manager plugin

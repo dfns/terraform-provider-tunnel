@@ -21,6 +21,7 @@ import (
 var TunnelType string = "ssh"
 
 type TunnelConfig struct {
+	LocalHost        string
 	LocalPort        int
 	SSHHost          string
 	SSHKey           string
@@ -94,15 +95,21 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 		return err
 	}
 
+	localHost := cfg.LocalHost
+	if localHost == "" {
+		localHost = "localhost"
+	}
+
 	target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
 	if cfg.TargetSocket != "" {
 		target = cfg.TargetSocket
 	}
-	log.Printf("starting tunnel: localhost:%d - %s:%d - %s", cfg.LocalPort, cfg.SSHHost, cfg.SSHPort, target)
+	log.Printf("starting tunnel: %s:%d - %s:%d - %s", localHost, cfg.LocalPort, cfg.SSHHost, cfg.SSHPort, target)
 
 	sshTun := sshtun.New(cfg.LocalPort, cfg.SSHHost, cfg.TargetPort)
 	sshTun.SetPort(cfg.SSHPort)
 	sshTun.SetUser(cfg.SSHUser)
+	sshTun.SetLocalHost(localHost)
 	if cfg.TargetSocket != "" {
 		sshTun.SetRemoteEndpoint(sshtun.NewUnixEndpoint(cfg.TargetSocket))
 	} else {
@@ -154,7 +161,8 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 			// when the first connection is handled. We wait for TunneledConnState
 			// with Ready=true to know the full tunnel (SSH + remote) is established.
 			go func() {
-				conn, err := net.DialTimeout("tcp", net.JoinHostPort("localhost", strconv.Itoa(cfg.LocalPort)), 30*time.Second)
+				addr := net.JoinHostPort(localHost, strconv.Itoa(cfg.LocalPort))
+				conn, err := net.DialTimeout("tcp", addr, 30*time.Second)
 				if err != nil {
 					log.Printf("tunnel probe dial failed: %v", err)
 					return
