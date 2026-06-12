@@ -16,7 +16,7 @@ require (
 	github.com/aws/smithy-go v1.27.1
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/rgzr/sshtun v1.2.3
-	github.com/shirou/gopsutil/v4 v4.26.4
+	github.com/shirou/gopsutil/v4 v4.26.5
 	golang.org/x/crypto v0.47.0
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.36.1
