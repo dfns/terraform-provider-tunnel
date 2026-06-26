@@ -47,7 +47,11 @@ func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) 
 	}
 
 	// Open a log file for the tunnel
-	tunnelLogPath := libs.TunnelLogPath(fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, cfg.TargetPort))
+	logPort := cfg.TargetPort
+	if logPort == "" {
+		logPort = cfg.LocalPort
+	}
+	tunnelLogPath := libs.TunnelLogPath(fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, logPort))
 	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
