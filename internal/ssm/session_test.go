@@ -8,24 +8,49 @@ import (
 )
 
 // TestCreateSessionInput verifies the AWS port-forwarding request is assembled
-// from the tunnel config: the document name is fixed and the three parameters
-// map to the configured target port, local port and host.
+// from the tunnel config: the document name defaults or follows SSMDocument,
+// and the three parameters map to the configured target port, local port and host.
 func TestCreateSessionInput(t *testing.T) {
-	cfg := TunnelConfig{
-		LocalPort:   "12345",
-		SSMInstance: "i-0abc123",
-		TargetHost:  "db.internal",
-		TargetPort:  "5432",
-	}
+	t.Run("default document when SSMDocument is empty", func(t *testing.T) {
+		cfg := TunnelConfig{
+			LocalPort:   "12345",
+			SSMInstance: "i-0abc123",
+			TargetHost:  "db.internal",
+			TargetPort:  "5432",
+		}
 
-	in := CreateSessionInput(cfg)
+		in := CreateSessionInput(cfg)
 
-	if in.Target == nil || *in.Target != cfg.SSMInstance {
-		t.Errorf("Target = %v, want %q", in.Target, cfg.SSMInstance)
-	}
-	if in.DocumentName == nil || *in.DocumentName != "AWS-StartPortForwardingSessionToRemoteHost" {
-		t.Errorf("DocumentName = %v, want AWS-StartPortForwardingSessionToRemoteHost", in.DocumentName)
-	}
+		if in.Target == nil || *in.Target != cfg.SSMInstance {
+			t.Errorf("Target = %v, want %q", in.Target, cfg.SSMInstance)
+		}
+		if in.DocumentName == nil || *in.DocumentName != DefaultSSMDocument {
+			t.Errorf("DocumentName = %v, want %q", in.DocumentName, DefaultSSMDocument)
+		}
+
+		assertPortForwardParams(t, in.Parameters)
+	})
+
+	t.Run("custom SSMDocument", func(t *testing.T) {
+		const customDoc = "My-Custom-PortForwardDoc"
+		cfg := TunnelConfig{
+			LocalPort:   "12345",
+			SSMInstance: "i-0abc123",
+			SSMDocument: customDoc,
+			TargetHost:  "db.internal",
+			TargetPort:  "5432",
+		}
+
+		in := CreateSessionInput(cfg)
+		if in.DocumentName == nil || *in.DocumentName != customDoc {
+			t.Errorf("DocumentName = %v, want %q", in.DocumentName, customDoc)
+		}
+		assertPortForwardParams(t, in.Parameters)
+	})
+}
+
+func assertPortForwardParams(t *testing.T, params map[string][]string) {
+	t.Helper()
 
 	wantParams := map[string]string{
 		"portNumber":      "5432",
@@ -33,12 +58,12 @@ func TestCreateSessionInput(t *testing.T) {
 		"host":            "db.internal",
 	}
 	for key, want := range wantParams {
-		got, ok := in.Parameters[key]
+		got, ok := params[key]
 		if !ok {
 			t.Errorf("missing parameter %q", key)
 			continue
 		}
-		if len(got) != 1 || got[0] != want {
+		if got[0] != want {
 			t.Errorf("parameter %q = %v, want [%q]", key, got, want)
 		}
 	}

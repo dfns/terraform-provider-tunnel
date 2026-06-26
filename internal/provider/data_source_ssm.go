@@ -27,6 +27,7 @@ type SSMDataSourceModel struct {
 	LocalHost   types.String `tfsdk:"local_host"`
 	LocalPort   types.Int64  `tfsdk:"local_port"`
 	SSMInstance types.String `tfsdk:"ssm_instance"`
+	SSMDocument types.String `tfsdk:"ssm_document"`
 	SSMProfile  types.String `tfsdk:"ssm_profile"`
 	SSMRoleARN  types.String `tfsdk:"ssm_role_arn"`
 	SSMRegion   types.String `tfsdk:"ssm_region"`
@@ -55,6 +56,10 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 			"ssm_instance": schema.StringAttribute{
 				MarkdownDescription: "Specify the exact Instance ID of the managed node to connect to for the session",
 				Required:            true,
+			},
+			"ssm_document": schema.StringAttribute{
+				MarkdownDescription: "Name of the SSM Session document to use for port forwarding. Defaults to `AWS-StartPortForwardingSessionToRemoteHost` when unset.",
+				Optional:            true,
 			},
 			"ssm_profile": schema.StringAttribute{
 				MarkdownDescription: "AWS profile name as set in credentials files. Can also be set using either the environment variables `AWS_PROFILE` or `AWS_DEFAULT_PROFILE`.",
@@ -114,6 +119,7 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	tunnelCfg := ssm.TunnelConfig{
 		LocalPort:   strconv.Itoa(localPort),
 		SSMInstance: data.SSMInstance.ValueString(),
+		SSMDocument: data.SSMDocument.ValueString(),
 		SSMProfile:  data.SSMProfile.ValueString(),
 		SSMRoleARN:  data.SSMRoleARN.ValueString(),
 		SSMRegion:   data.SSMRegion.ValueString(),
