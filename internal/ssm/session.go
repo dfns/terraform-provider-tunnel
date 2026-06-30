@@ -79,11 +79,14 @@ func CreateSessionInput(cfg TunnelConfig) ssm.StartSessionInput {
 	reqParams := make(map[string][]string)
 	reqParams["portNumber"] = []string{cfg.TargetPort}
 	reqParams["localPortNumber"] = []string{cfg.LocalPort}
-	reqParams["host"] = []string{cfg.TargetHost}
 
 	docName := cfg.SSMDocument
 	if docName == "" {
 		docName = DefaultSSMDocument
+	}
+
+	if cfg.TargetHost != "" {
+		reqParams["host"] = []string{cfg.TargetHost}
 	}
 
 	return ssm.StartSessionInput{

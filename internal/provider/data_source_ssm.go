@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -11,6 +12,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+func validateSSMTarget(targetHost, ssmDocument types.String) error {
+	doc := ssmDocument.ValueString()
+	if doc != "" && doc != ssm.DefaultSSMDocument {
+		return nil
+	}
+	if targetHost.IsNull() || targetHost.ValueString() == "" {
+		return errors.New("`target_host` is required when `ssm_document` is unset or set to `AWS-StartPortForwardingSessionToRemoteHost`")
+	}
+	return nil
+}
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ datasource.DataSource = &SSMDataSource{}
@@ -44,10 +56,9 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 		MarkdownDescription: "Create a local AWS SSM tunnel to a remote host",
 
 		Attributes: map[string]schema.Attribute{
-			// Required attributes
 			"target_host": schema.StringAttribute{
-				MarkdownDescription: "The DNS name or IP address of the remote host",
-				Required:            true,
+				MarkdownDescription: "The DNS name or IP address of the remote host. Required when `ssm_document` is unset or set to `AWS-StartPortForwardingSessionToRemoteHost`; omit when using a custom document that defines a fixed host.",
+				Optional:            true,
 			},
 			"target_port": schema.Int64Attribute{
 				MarkdownDescription: "The port number of the remote host",
@@ -98,6 +109,14 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if err := validateSSMTarget(data.TargetHost, data.SSMDocument); err != nil {
+		resp.Diagnostics.AddError(
+			"target_host is required for the default SSM port-forwarding document",
+			err.Error(),
+		)
 		return
 	}
 
