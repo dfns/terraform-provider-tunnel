@@ -9,7 +9,7 @@ import (
 
 // TestCreateSessionInput verifies the AWS port-forwarding request is assembled
 // from the tunnel config: the document name defaults or follows SSMDocument,
-// and the three parameters map to the configured target port, local port and host.
+// port/localPort are always set, and host is included only when TargetHost is set.
 func TestCreateSessionInput(t *testing.T) {
 	t.Run("default document when SSMDocument is empty", func(t *testing.T) {
 		cfg := TunnelConfig{
@@ -28,7 +28,7 @@ func TestCreateSessionInput(t *testing.T) {
 			t.Errorf("DocumentName = %v, want %q", in.DocumentName, DefaultSSMDocument)
 		}
 
-		assertPortForwardParams(t, in.Parameters)
+		assertPortForwardParams(t, in.Parameters, "db.internal")
 	})
 
 	t.Run("custom SSMDocument", func(t *testing.T) {
@@ -45,17 +45,28 @@ func TestCreateSessionInput(t *testing.T) {
 		if in.DocumentName == nil || *in.DocumentName != customDoc {
 			t.Errorf("DocumentName = %v, want %q", in.DocumentName, customDoc)
 		}
-		assertPortForwardParams(t, in.Parameters)
+		assertPortForwardParams(t, in.Parameters, "db.internal")
+	})
+
+	t.Run("omits host when TargetHost is empty", func(t *testing.T) {
+		cfg := TunnelConfig{
+			LocalPort:   "12345",
+			SSMInstance: "i-0abc123",
+			SSMDocument: "My-Custom-PortForwardDoc",
+			TargetPort:  "5432",
+		}
+
+		in := CreateSessionInput(cfg)
+		assertPortForwardParams(t, in.Parameters, "")
 	})
 }
 
-func assertPortForwardParams(t *testing.T, params map[string][]string) {
+func assertPortForwardParams(t *testing.T, params map[string][]string, wantHost string) {
 	t.Helper()
 
 	wantParams := map[string]string{
 		"portNumber":      "5432",
 		"localPortNumber": "12345",
-		"host":            "db.internal",
 	}
 	for key, want := range wantParams {
 		got, ok := params[key]
@@ -66,6 +77,16 @@ func assertPortForwardParams(t *testing.T, params map[string][]string) {
 		if got[0] != want {
 			t.Errorf("parameter %q = %v, want [%q]", key, got, want)
 		}
+	}
+
+	gotHost, hasHost := params["host"]
+	switch {
+	case wantHost == "" && hasHost:
+		t.Errorf("host parameter = %v, want omitted", gotHost)
+	case wantHost != "" && !hasHost:
+		t.Errorf("missing parameter %q", "host")
+	case wantHost != "" && gotHost[0] != wantHost:
+		t.Errorf("parameter %q = %v, want [%q]", "host", gotHost, wantHost)
 	}
 }
 

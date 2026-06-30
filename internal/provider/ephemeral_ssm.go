@@ -44,10 +44,9 @@ func (d *SSMEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, 
 		MarkdownDescription: "Create a local AWS SSM tunnel to a remote host",
 
 		Attributes: map[string]schema.Attribute{
-			// Required attributes
 			"target_host": schema.StringAttribute{
-				MarkdownDescription: "The DNS name or IP address of the remote host",
-				Required:            true,
+				MarkdownDescription: "The DNS name or IP address of the remote host. Required when `ssm_document` is unset or set to `AWS-StartPortForwardingSessionToRemoteHost`; omit when using a custom document that defines a fixed host.",
+				Optional:            true,
 			},
 			"target_port": schema.Int64Attribute{
 				MarkdownDescription: "The port number of the remote host",
@@ -97,6 +96,14 @@ func (d *SSMEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if err := validateSSMTarget(data.TargetHost, data.SSMDocument); err != nil {
+		resp.Diagnostics.AddError(
+			"target_host is required for the default SSM port-forwarding document",
+			err.Error(),
+		)
 		return
 	}
 
