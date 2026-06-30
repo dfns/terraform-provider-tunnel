@@ -12,9 +12,13 @@ import (
 
 const DEFAULT_SSM_ENV_NAME = "AWS_SSM_START_SESSION_RESPONSE"
 
+// Default SSM document for port forwarding.
+const DefaultSSMDocument = "AWS-StartPortForwardingSessionToRemoteHost"
+
 type TunnelConfig struct {
 	LocalPort   string
 	SSMInstance string
+	SSMDocument string
 	SSMProfile  string
 	SSMRoleARN  string
 	SSMRegion   string
@@ -77,9 +81,14 @@ func CreateSessionInput(cfg TunnelConfig) ssm.StartSessionInput {
 	reqParams["localPortNumber"] = []string{cfg.LocalPort}
 	reqParams["host"] = []string{cfg.TargetHost}
 
+	docName := cfg.SSMDocument
+	if docName == "" {
+		docName = DefaultSSMDocument
+	}
+
 	return ssm.StartSessionInput{
 		Target:       aws.String(cfg.SSMInstance),
-		DocumentName: aws.String("AWS-StartPortForwardingSessionToRemoteHost"),
+		DocumentName: aws.String(docName),
 		Parameters:   reqParams,
 	}
 }
