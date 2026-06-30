@@ -35,15 +35,16 @@ provider "postgresql" {
 ### Required
 
 - `ssm_instance` (String) Specify the exact Instance ID of the managed node to connect to for the session
-- `target_host` (String) The DNS name or IP address of the remote host
 - `target_port` (Number) The port number of the remote host
 
 ### Optional
 
 - `local_port` (Number) The local port to listen on. If not set, a random free port is chosen.
+- `ssm_document` (String) Name of the SSM Session document to use for port forwarding. Defaults to `AWS-StartPortForwardingSessionToRemoteHost` when unset.
 - `ssm_profile` (String) AWS profile name as set in credentials files. Can also be set using either the environment variables `AWS_PROFILE` or `AWS_DEFAULT_PROFILE`.
 - `ssm_region` (String) AWS Region where the instance is located. The Region must be set. Can also be set using either the environment variables `AWS_REGION` or `AWS_DEFAULT_REGION`.
 - `ssm_role_arn` (String) ARN of an IAM role to assume.
+- `target_host` (String) The DNS name or IP address of the remote host. Required when `ssm_document` is unset or set to `AWS-StartPortForwardingSessionToRemoteHost`; omit when using a custom document that defines a fixed host.
 
 ### Read-Only
 
