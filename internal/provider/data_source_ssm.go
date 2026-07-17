@@ -27,6 +27,7 @@ type SSMDataSourceModel struct {
 	LocalHost   types.String `tfsdk:"local_host"`
 	LocalPort   types.Int64  `tfsdk:"local_port"`
 	SSMInstance types.String `tfsdk:"ssm_instance"`
+	SSMDocument types.String `tfsdk:"ssm_document"`
 	SSMProfile  types.String `tfsdk:"ssm_profile"`
 	SSMRoleARN  types.String `tfsdk:"ssm_role_arn"`
 	SSMRegion   types.String `tfsdk:"ssm_region"`
@@ -43,18 +44,21 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 		MarkdownDescription: "Create a local AWS SSM tunnel to a remote host",
 
 		Attributes: map[string]schema.Attribute{
-			// Required attributes
 			"target_host": schema.StringAttribute{
-				MarkdownDescription: "The DNS name or IP address of the remote host",
-				Required:            true,
+				MarkdownDescription: "The DNS name or IP address of the remote host. Required when `ssm_document` is unset or set to `AWS-StartPortForwardingSessionToRemoteHost`; omit when using a custom document that defines a fixed host.",
+				Optional:            true,
 			},
 			"target_port": schema.Int64Attribute{
-				MarkdownDescription: "The port number of the remote host",
-				Required:            true,
+				MarkdownDescription: "The port number of the remote host. Required when `ssm_document` is unset or set to `AWS-StartPortForwardingSessionToRemoteHost`; omit when using a custom document that defines a fixed port.",
+				Optional:            true,
 			},
 			"ssm_instance": schema.StringAttribute{
 				MarkdownDescription: "Specify the exact Instance ID of the managed node to connect to for the session",
 				Required:            true,
+			},
+			"ssm_document": schema.StringAttribute{
+				MarkdownDescription: "Name of the SSM Session document to use for port forwarding. Defaults to `AWS-StartPortForwardingSessionToRemoteHost` when unset.",
+				Optional:            true,
 			},
 			"ssm_profile": schema.StringAttribute{
 				MarkdownDescription: "AWS profile name as set in credentials files. Can also be set using either the environment variables `AWS_PROFILE` or `AWS_DEFAULT_PROFILE`.",
@@ -96,6 +100,11 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 		return
 	}
 
+	appendSSMTunnelValidationDiagnostics(&resp.Diagnostics, data.TargetHost, data.TargetPort, data.SSMDocument)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	localPort := int(data.LocalPort.ValueInt64())
 	if localPort == 0 {
 		var err error
@@ -114,11 +123,12 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 	tunnelCfg := ssm.TunnelConfig{
 		LocalPort:   strconv.Itoa(localPort),
 		SSMInstance: data.SSMInstance.ValueString(),
+		SSMDocument: data.SSMDocument.ValueString(),
 		SSMProfile:  data.SSMProfile.ValueString(),
 		SSMRoleARN:  data.SSMRoleARN.ValueString(),
 		SSMRegion:   data.SSMRegion.ValueString(),
 		TargetHost:  data.TargetHost.ValueString(),
-		TargetPort:  strconv.Itoa(int(data.TargetPort.ValueInt64())),
+		TargetPort:  ssmTargetPortString(data.TargetPort),
 	}
 
 	awsCfg, err := ssm.GetNewSDKConfig(ctx, tunnelCfg)
