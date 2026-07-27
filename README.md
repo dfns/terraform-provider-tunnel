@@ -14,6 +14,7 @@ The provider is compatible with HashiCorp Cloud Platform (HCP)
 ## Available tunnel types
 
 - [AWS Systems Manager (SSM)](#aws-systems-manager-ssm)
+- [Azure Bastion](#azure-bastion)
 - [SSH Tunneling](#ssh-tunneling)
 - [Kubernetes Port Forwarding](#kubernetes-port-forwarding)
 
@@ -57,6 +58,12 @@ ephemeral "tunnel_kubernetes" "service" {
   }
 }
 
+ephemeral "tunnel_azure_bastion" "database" {
+  bastion_host_id    = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/network/providers/Microsoft.Network/bastionHosts/main"
+  target_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/application/providers/Microsoft.Compute/virtualMachines/database"
+  target_port        = 5432
+}
+
 provider "kubernetes" {
   host = format(
     "https://%s:%s",
@@ -98,6 +105,12 @@ data "tunnel_kubernetes" "service" {
     config_context = "my-context"
   }
 }
+
+data "tunnel_azure_bastion" "database" {
+  bastion_host_id    = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/network/providers/Microsoft.Network/bastionHosts/main"
+  target_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/application/providers/Microsoft.Compute/virtualMachines/database"
+  target_port        = 5432
+}
 ```
 
 ## Tunnel Details
@@ -106,6 +119,12 @@ data "tunnel_kubernetes" "service" {
 
 Establishes a secure tunnel to a remote host using [AWS Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html).
 This method requires the SSM Agent to be installed and correctly configured with IAM permissions on the target instance.
+
+### Azure Bastion
+
+Establishes a tunnel to a remote host through [Azure Bastion](https://learn.microsoft.com/en-us/azure/bastion/bastion-overview) using its native-client tunneling protocol (the same as `az network bastion tunnel`).
+The bastion must use the Standard or Premium SKU with native client support (`enableTunneling`) enabled; connecting by IP address additionally requires IP connect (`enableIpConnect`).
+Authentication uses the standard Azure credential chain (environment service principals, workload identity, managed identity, Azure CLI login).
 
 ### SSH Tunneling
 

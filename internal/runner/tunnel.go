@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 
+	azb "github.com/dfns/terraform-provider-tunnel/internal/azurebastion"
 	k8s "github.com/dfns/terraform-provider-tunnel/internal/kubernetes"
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssh"
@@ -31,6 +32,8 @@ func StartTunnel(tun string) error {
 	}
 
 	switch tun {
+	case azb.TunnelType:
+		return azb.StartRemoteTunnel(context.Background(), cfgJson, parentPid)
 	case ssh.TunnelType:
 		return ssh.StartRemoteTunnel(context.Background(), cfgJson, parentPid)
 	case ssm.TunnelType:

@@ -76,7 +76,7 @@ func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) 
 		return nil, err
 	}
 
-	if err = libs.WaitForReadyFile(cmd.Process.Pid, readyFilePath); err != nil {
+	if err = libs.WaitForReadyFile(ctx, cmd.Process.Pid, readyFilePath); err != nil {
 		return nil, fmt.Errorf("%w. check %s for more information", err, tunnelLogPath)
 	}
 

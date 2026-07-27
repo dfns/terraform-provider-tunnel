@@ -52,6 +52,14 @@ func TestStartTunnelErrors(t *testing.T) {
 			args:    []string{"terraform-provider-tunnel", "1"},
 			wantErr: "unknown tunnel type",
 		},
+		{
+			name:    "Azure Bastion dispatch",
+			tun:     "azure_bastion",
+			conf:    "{}",
+			setConf: true,
+			args:    []string{"terraform-provider-tunnel", "1"},
+			wantErr: "bastion_host_id",
+		},
 	}
 
 	for _, tt := range tests {

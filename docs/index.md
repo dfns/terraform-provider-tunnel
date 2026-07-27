@@ -15,6 +15,7 @@ The provider is compatible with HashiCorp Cloud Platform (HCP)
 ## Available tunnel types
 
 - [AWS Systems Manager (SSM)](#aws-systems-manager-ssm)
+- [Azure Bastion](#azure-bastion)
 - [SSH Tunneling](#ssh-tunneling)
 - [Kubernetes Port Forwarding](#kubernetes-port-forwarding)
 
@@ -82,6 +83,12 @@ data "tunnel_kubernetes" "service" {
     config_context = "my-context"
   }
 }
+
+data "tunnel_azure_bastion" "database" {
+  bastion_host_id    = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/network/providers/Microsoft.Network/bastionHosts/main"
+  target_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/application/providers/Microsoft.Compute/virtualMachines/database"
+  target_port        = 5432
+}
 ```
 
 ## Tunnel Details
@@ -102,6 +109,29 @@ data "tunnel_ssm" "rds" {
 provider "postgresql" {
   host     = data.tunnel_ssm.rds.local_host
   port     = data.tunnel_ssm.rds.local_port
+  database = "my-database"
+  username = "my-user"
+  password = "my-password"
+}
+```
+
+### Azure Bastion
+
+Establishes a tunnel to a remote host through [Azure Bastion](https://learn.microsoft.com/en-us/azure/bastion/bastion-overview) using its native-client tunneling protocol (the same as `az network bastion tunnel`).
+The bastion must use the Standard or Premium SKU with native client support (`enableTunneling`) enabled; connecting by IP address additionally requires IP connect (`enableIpConnect`).
+Authentication uses the standard Azure credential chain (environment service principals, workload identity, managed identity, Azure CLI login).
+
+```terraform
+data "tunnel_azure_bastion" "postgres" {
+  bastion_host_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/network/providers/Microsoft.Network/bastionHosts/main"
+
+  target_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/application/providers/Microsoft.Compute/virtualMachines/postgres"
+  target_port        = 5432
+}
+
+provider "postgresql" {
+  host     = data.tunnel_azure_bastion.postgres.local_host
+  port     = data.tunnel_azure_bastion.postgres.local_port
   database = "my-database"
   username = "my-user"
   password = "my-password"
