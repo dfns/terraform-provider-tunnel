@@ -19,7 +19,7 @@ import (
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssh"
-	"github.com/dfns/terraform-provider-tunnel/internal/sshtest"
+	"github.com/dfns/terraform-provider-tunnel/internal/ssh/sshtest"
 )
 
 const sshTargetBody = "tunnel-it-ok"

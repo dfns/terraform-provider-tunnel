@@ -3,14 +3,12 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os/user"
 	"strconv"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssh"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -20,23 +18,8 @@ func NewSSHEphemeral() ephemeral.EphemeralResource {
 	return &SSHEphemeral{}
 }
 
-// SSHEphemeral defines the data source implementation.
+// SSHEphemeral defines the ephemeral resource implementation.
 type SSHEphemeral struct{}
-
-// SSHEphemeralModel describes the data source data model.
-type SSHEphemeralModel struct {
-	LocalHost        types.String `tfsdk:"local_host"`
-	LocalPort        types.Int64  `tfsdk:"local_port"`
-	SSHHost          types.String `tfsdk:"ssh_host"`
-	SSHKey           types.String `tfsdk:"ssh_key"`
-	SSHKeyPassphrase types.String `tfsdk:"ssh_key_passphrase"`
-	SSHPassword      types.String `tfsdk:"ssh_password"`
-	SSHPort          types.Int64  `tfsdk:"ssh_port"`
-	SSHUser          types.String `tfsdk:"ssh_user"`
-	TargetHost       types.String `tfsdk:"target_host"`
-	TargetPort       types.Int64  `tfsdk:"target_port"`
-	TargetSocket     types.String `tfsdk:"target_socket"`
-}
 
 func (d *SSHEphemeral) Metadata(ctx context.Context, req ephemeral.MetadataRequest, resp *ephemeral.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ssh"
@@ -103,7 +86,7 @@ func (d *SSHEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, 
 }
 
 func (d *SSHEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp *ephemeral.OpenResponse) {
-	var data SSHEphemeralModel
+	var data SSHModel
 
 	// Read Terraform configuration data into the model
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
@@ -112,51 +95,12 @@ func (d *SSHEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 		return
 	}
 
-	if err := validateSSHTarget(data.TargetHost, data.TargetSocket, data.TargetPort); err != nil {
-		resp.Diagnostics.AddError("Invalid target configuration", err.Error())
+	cfg, err := sshConfig(&data)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid SSH tunnel configuration", err.Error())
 		return
 	}
-
-	localPort := int(data.LocalPort.ValueInt64())
-	if localPort == 0 {
-		var err error
-		localPort, err = libs.GetFreePort()
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
-			return
-		}
-	}
-
-	if data.LocalHost.IsNull() {
-		data.LocalHost = types.StringValue("localhost")
-	}
-	data.LocalPort = types.Int64Value(int64(localPort))
-
-	if data.SSHUser.IsNull() {
-		user, err := user.Current()
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to get current user", fmt.Sprintf("Error: %s", err))
-			return
-		}
-		data.SSHUser = types.StringValue(user.Username)
-	}
-	if data.SSHPort.IsNull() {
-		data.SSHPort = types.Int64Value(22)
-	}
-
-	cmd, err := ssh.ForkRemoteTunnel(ctx, ssh.TunnelConfig{
-		LocalHost:        data.LocalHost.ValueString(),
-		LocalPort:        localPort,
-		SSHHost:          data.SSHHost.ValueString(),
-		SSHKey:           data.SSHKey.ValueString(),
-		SSHKeyPassphrase: data.SSHKeyPassphrase.ValueString(),
-		SSHPassword:      data.SSHPassword.ValueString(),
-		SSHPort:          int(data.SSHPort.ValueInt64()),
-		SSHUser:          data.SSHUser.ValueString(),
-		TargetHost:       data.TargetHost.ValueString(),
-		TargetPort:       int(data.TargetPort.ValueInt64()),
-		TargetSocket:     data.TargetSocket.ValueString(),
-	})
+	cmd, err := ssh.ForkRemoteTunnel(ctx, cfg)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to fork tunnel process", fmt.Sprintf("Error: %s", err))
 		return

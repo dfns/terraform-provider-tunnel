@@ -1,5 +1,8 @@
-//go:build e2e || integration
-
+// Package sshtest provides an in-process SSH bastion for tunnel tests. The
+// server authenticates a generated key and services the channel types a local
+// forward opens ("direct-tcpip" and "direct-streamlocal@openssh.com", the server
+// side of `ssh -L`), so a tunnel can forward through it to an arbitrary local
+// target without any external SSH daemon.
 package sshtest
 
 import (
@@ -48,9 +51,10 @@ func GenerateClientKey(t testing.TB) (string, ssh.PublicKey) {
 }
 
 // StartServer starts a minimal SSH server on a random localhost port that
-// authenticates the given key and handles "direct-tcpip" (ssh -L) channels so a
-// local forward works. It returns the listening port and tears the server down
-// on test cleanup.
+// authenticates the given key and handles the channel types a local forward uses
+// ("direct-tcpip" for `ssh -L`, "direct-streamlocal@openssh.com" for a unix
+// socket target). It returns the listening port and tears the server down on test
+// cleanup.
 func StartServer(t testing.TB, authorizedKey ssh.PublicKey) int {
 	t.Helper()
 
@@ -98,11 +102,14 @@ func handleSSHConn(c net.Conn, config *ssh.ServerConfig) {
 	go ssh.DiscardRequests(reqs)
 
 	for nc := range chans {
-		if nc.ChannelType() != "direct-tcpip" {
-			_ = nc.Reject(ssh.UnknownChannelType, "only direct-tcpip is supported")
-			continue
+		switch nc.ChannelType() {
+		case "direct-tcpip":
+			go handleDirectTCPIP(nc)
+		case "direct-streamlocal@openssh.com":
+			go handleStreamLocal(nc)
+		default:
+			_ = nc.Reject(ssh.UnknownChannelType, "unsupported channel type")
 		}
-		go handleDirectTCPIP(nc)
 	}
 }
 
@@ -119,9 +126,33 @@ func handleDirectTCPIP(nc ssh.NewChannel) {
 		_ = nc.Reject(ssh.ConnectionFailed, "bad direct-tcpip payload")
 		return
 	}
-
 	dest := net.JoinHostPort(payload.DestAddr, strconv.Itoa(int(payload.DestPort)))
-	target, err := net.Dial("tcp", dest)
+	serveChannel(nc, "tcp", dest)
+}
+
+// handleStreamLocal is the unix-socket counterpart of handleDirectTCPIP (the
+// server side of `ssh -L local:/path/to.sock`).
+func handleStreamLocal(nc ssh.NewChannel) {
+	var payload struct {
+		SocketPath  string
+		Reserved    string
+		ReservedU32 uint32
+	}
+	if err := ssh.Unmarshal(nc.ExtraData(), &payload); err != nil {
+		_ = nc.Reject(ssh.ConnectionFailed, "bad direct-streamlocal payload")
+		return
+	}
+	serveChannel(nc, "unix", payload.SocketPath)
+}
+
+// serveChannel pipes the channel to its target, passing each direction's EOF on as a
+// half-close the way a real sshd does.
+//
+// Deliberately its own copy loop rather than the production relay: the half-close
+// tests measure the tunnel against this fixture, and sharing that code would put the
+// same policy on both sides of the assertion, where a regression cancels out.
+func serveChannel(nc ssh.NewChannel, network, address string) {
+	target, err := net.Dial(network, address)
 	if err != nil {
 		_ = nc.Reject(ssh.ConnectionFailed, err.Error())
 		return
@@ -134,12 +165,25 @@ func handleDirectTCPIP(nc ssh.NewChannel) {
 	}
 	go ssh.DiscardRequests(chReqs)
 
+	done := make(chan struct{})
 	go func() {
-		_, _ = io.Copy(ch, target)
-		_ = ch.CloseWrite()
-	}()
-	go func() {
+		defer close(done)
 		_, _ = io.Copy(target, ch)
-		_ = target.Close()
+		closeWrite(target)
 	}()
+	_, _ = io.Copy(ch, target)
+	_ = ch.CloseWrite()
+	<-done
+
+	_ = ch.Close()
+	_ = target.Close()
+}
+
+// closeWrite mirrors libs.HalfClose, kept separate for the reason serveChannel gives.
+func closeWrite(conn net.Conn) {
+	if hc, ok := conn.(interface{ CloseWrite() error }); ok {
+		_ = hc.CloseWrite()
+		return
+	}
+	_ = conn.Close()
 }
