@@ -1,6 +1,8 @@
 package libs
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -21,7 +23,6 @@ func WatchProcess(pid int) (err error) {
 	if err != nil {
 		return err
 	}
-	// poll for parent process liveliness every 2 seconds
 	go func() {
 		for {
 			running, err := parent.IsRunning()
@@ -103,17 +104,41 @@ func SignalReady(path string) error {
 	return os.WriteFile(path, []byte("ready"), 0644)
 }
 
-func WaitForReadyFile(pid int, path string) error {
+// SignalReadyIfRequested is a no-op outside a forked tunnel.
+func SignalReadyIfRequested() error {
+	path := os.Getenv(TunnelReadyEnv)
+	if path == "" {
+		return nil
+	}
+	if err := SignalReady(path); err != nil {
+		return fmt.Errorf("signal tunnel readiness: %w", err)
+	}
+	return nil
+}
+
+func WaitForReadyFile(ctx context.Context, pid int, path string) error {
 	timeout := 30 * time.Second
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
 		if err := CheckProcessExists(pid); err != nil {
 			return fmt.Errorf("process exited unexpectedly: %w", err)
 		}
 		if _, err := os.Stat(path); err == nil {
 			return nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("check tunnel readiness: %w", err)
 		}
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-waitCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("wait for tunnel readiness: %w", err)
+			}
+			return fmt.Errorf("tunnel not ready after %s", timeout)
+		case <-ticker.C:
+		}
 	}
-	return fmt.Errorf("tunnel not ready after %s", timeout)
 }

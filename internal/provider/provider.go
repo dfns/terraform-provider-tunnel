@@ -40,6 +40,7 @@ func (p *TunnelProvider) Resources(ctx context.Context) []func() resource.Resour
 
 func (p *TunnelProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
+		NewAzureBastionDataSource,
 		NewSSHDataSource,
 		NewSSMDataSource,
 		NewKubernetesDataSource,
@@ -48,6 +49,7 @@ func (p *TunnelProvider) DataSources(ctx context.Context) []func() datasource.Da
 
 func (p *TunnelProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
 	return []func() ephemeral.EphemeralResource{
+		NewAzureBastionEphemeral,
 		NewSSHEphemeral,
 		NewSSMEphemeral,
 		NewKubernetesEphemeral,

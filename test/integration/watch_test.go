@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -148,7 +149,7 @@ func TestWaitForReadyFile(t *testing.T) {
 			t.Fatalf("SignalReady wrote %q (err %v), want \"ready\"", data, err)
 		}
 
-		if err := libs.WaitForReadyFile(sleeper.Process.Pid, path); err != nil {
+		if err := libs.WaitForReadyFile(context.Background(), sleeper.Process.Pid, path); err != nil {
 			t.Fatalf("WaitForReadyFile: %v", err)
 		}
 	})
@@ -162,7 +163,7 @@ func TestWaitForReadyFile(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "ready") // never created
 
 		start := time.Now()
-		err := libs.WaitForReadyFile(pid, path)
+		err := libs.WaitForReadyFile(context.Background(), pid, path)
 		if err == nil {
 			t.Fatal("expected an error once the process exited")
 		}
