@@ -30,6 +30,21 @@ module.exports = {
         "github.com/aws/smithy-go",
       ],
     },
+    {
+      groupName: "azure-sdk-for-go packages",
+      groupSlug: "azure-sdk-for-go",
+      matchDatasources: ["go"],
+      matchPackageNames: [
+        "github.com/Azure/azure-sdk-for-go/**",
+        "github.com/AzureAD/microsoft-authentication-library-for-go",
+      ],
+    },
+    {
+      groupName: "kubernetes packages",
+      groupSlug: "kubernetes",
+      matchDatasources: ["go"],
+      matchPackageNames: ["k8s.io/**", "sigs.k8s.io/**"],
+    },
   ],
   customManagers: [],
 };

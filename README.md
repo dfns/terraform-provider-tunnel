@@ -1,7 +1,6 @@
 # Terraform Provider: Tunnel
 
 [![GitHub Release](https://img.shields.io/github/v/release/dfns/terraform-provider-tunnel)](https://github.com/dfns/terraform-provider-tunnel/releases/latest)
-[![Go Report Card](https://goreportcard.com/badge/github.com/dfns/terraform-provider-tunnel)](https://goreportcard.com/report/github.com/dfns/terraform-provider-tunnel)
 [![Terraform Downloads](https://img.shields.io/terraform/provider/dt/5739?logo=terraform&logoColor=white&color=%23844FBA)](https://registry.terraform.io/providers/dfns/tunnel)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dfns/terraform-provider-tunnel/total?logo=github)](https://github.com/dfns/terraform-provider-tunnel/releases)
 
