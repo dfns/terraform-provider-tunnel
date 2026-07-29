@@ -1,8 +1,10 @@
 package ssh
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -116,7 +118,7 @@ func defaultKeys() ssh.AuthMethod {
 	return ssh.PublicKeys(signers...)
 }
 
-// Probe now, but reconnect for each callback to avoid holding the agent socket.
+// Probe now, but reconnect for each agent request to avoid holding the socket.
 func agentKeys() ssh.AuthMethod {
 	socket := os.Getenv("SSH_AUTH_SOCK")
 	if socket == "" {
@@ -134,6 +136,56 @@ func agentKeys() ssh.AuthMethod {
 			return nil, err
 		}
 		defer conn.Close()
-		return agent.NewClient(conn).Signers()
+		keys, err := agent.NewClient(conn).List()
+		if err != nil {
+			return nil, err
+		}
+		signers := make([]ssh.Signer, 0, len(keys))
+		for _, key := range keys {
+			signers = append(signers, &agentSigner{socket: socket, pub: key})
+		}
+		return signers, nil
 	})
+}
+
+// agentSigner dials the agent per signature. agent.Client.Signers() would bind
+// its signers to one connection, and ssh uses the signers a PublicKeysCallback
+// returned after the callback has returned, so that connection is closed by the
+// time the handshake asks for a signature.
+type agentSigner struct {
+	socket string
+	pub    ssh.PublicKey
+}
+
+var _ ssh.AlgorithmSigner = (*agentSigner)(nil)
+
+func (s *agentSigner) PublicKey() ssh.PublicKey { return s.pub }
+
+func (s *agentSigner) Sign(rand io.Reader, data []byte) (*ssh.Signature, error) {
+	return s.SignWithAlgorithm(rand, data, "")
+}
+
+func (s *agentSigner) SignWithAlgorithm(rand io.Reader, data []byte, algorithm string) (*ssh.Signature, error) {
+	conn, err := net.Dial("unix", s.socket)
+	if err != nil {
+		return nil, fmt.Errorf("connect to ssh-agent: %w", err)
+	}
+	defer conn.Close()
+
+	// Delegate rather than sign through the agent client directly, to keep its
+	// mapping from signature algorithm to agent flags.
+	signers, err := agent.NewClient(conn).Signers()
+	if err != nil {
+		return nil, err
+	}
+	for _, signer := range signers {
+		if !bytes.Equal(signer.PublicKey().Marshal(), s.pub.Marshal()) {
+			continue
+		}
+		if as, ok := signer.(ssh.AlgorithmSigner); ok {
+			return as.SignWithAlgorithm(rand, data, algorithm)
+		}
+		return signer.Sign(rand, data)
+	}
+	return nil, fmt.Errorf("ssh-agent dropped the %s key it offered", s.pub.Type())
 }

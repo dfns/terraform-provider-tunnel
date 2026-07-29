@@ -14,11 +14,21 @@ type forwarder struct {
 	clients *clientPool
 	network string
 	target  string
+	server  *libs.ConnServer
 }
 
-func newForwarder(listener net.Listener, clients *clientPool, network, target string) *libs.ConnServer {
+func newForwarder(listener net.Listener, clients *clientPool, network, target string) *forwarder {
 	f := &forwarder{clients: clients, network: network, target: target}
-	return libs.NewConnServer(listener, f.handle)
+	f.server = libs.NewConnServer(listener, f.handle)
+	return f
+}
+
+func (f *forwarder) Serve(ctx context.Context) error {
+	return f.server.Serve(ctx)
+}
+
+func (f *forwarder) Close() {
+	f.server.Close()
 }
 
 func (f *forwarder) handle(ctx context.Context, local net.Conn) {
@@ -39,7 +49,7 @@ func (f *forwarder) dialTarget(ctx context.Context) (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		remote, err := client.Dial(f.network, f.target)
+		remote, err := client.DialContext(ctx, f.network, f.target)
 		if err == nil {
 			return remote, nil
 		}

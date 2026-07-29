@@ -1,15 +1,20 @@
 package ssh
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/dfns/terraform-provider-tunnel/internal/ssh/sshtest"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 // isolateCredentials empties the ambient sources authMethods falls back to, so a
@@ -159,6 +164,56 @@ func TestAuthMethodsWithoutAnyCredential(t *testing.T) {
 	if _, err := authMethods(TunnelConfig{}); err == nil {
 		t.Fatal("authMethods() = nil, want an error naming the ways to authenticate")
 	}
+}
+
+// startAgent serves an in-process ssh-agent holding keyPEM and points
+// SSH_AUTH_SOCK at it.
+func startAgent(t *testing.T, keyPEM string) {
+	t.Helper()
+	key, err := ssh.ParseRawPrivateKey([]byte(keyPEM))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring := agent.NewKeyring()
+	if err := keyring.Add(agent.AddedKey{PrivateKey: key}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Not t.TempDir(): its path can exceed the unix socket path length limit.
+	dir, err := os.MkdirTemp("", "agt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	listener, err := net.Listen("unix", filepath.Join(dir, "s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	go acceptLoop(listener, func(conn net.Conn) { _ = agent.ServeAgent(keyring, conn) })
+	t.Setenv("SSH_AUTH_SOCK", listener.Addr().String())
+}
+
+// TestAuthMethodsSignsWithAgentKey guards the agent path end to end: ssh asks the
+// signers a PublicKeysCallback returned for a signature only after the callback
+// has returned, so a signer bound to a connection the callback closed fails the
+// handshake.
+func TestAuthMethodsSignsWithAgentKey(t *testing.T) {
+	isolateCredentials(t)
+	keyPEM, authorizedKey := sshtest.GenerateClientKey(t)
+	startAgent(t, keyPEM)
+	sshAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(sshtest.StartServer(t, authorizedKey)))
+
+	cfg, err := clientConfig(TunnelConfig{SSHUser: sshtest.User})
+	if err != nil {
+		t.Fatalf("clientConfig() = %v", err)
+	}
+	client, err := dialSSH(context.Background(), sshAddr, cfg)
+	if err != nil {
+		t.Fatalf("dialSSH() = %v", err)
+	}
+	_ = client.Close()
 }
 
 func TestClientConfigDefaultsToRoot(t *testing.T) {

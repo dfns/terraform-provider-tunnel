@@ -94,6 +94,14 @@ func runTunnel(ctx context.Context, cfg TunnelConfig) error {
 	fwd := newForwarder(listener, clients, network, target)
 	defer fwd.Close()
 
+	// Preserve the readiness contract: the local listener is only useful once
+	// the bastion can also open a channel to the configured target.
+	probe, err := fwd.dialTarget(runCtx)
+	if err != nil {
+		return fmt.Errorf("connect to SSH target %s: %w", target, err)
+	}
+	_ = probe.Close()
+
 	if err := libs.SignalReadyIfRequested(); err != nil {
 		return err
 	}

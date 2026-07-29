@@ -6,11 +6,15 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
+	"github.com/dfns/terraform-provider-tunnel/internal/ssh/sshtest"
+	"golang.org/x/crypto/ssh"
 )
 
 // TestForwardPassesHalfCloseThrough is the regression test for the bug that
@@ -150,6 +154,60 @@ func TestForwardKeepsSSHConnectionWhenTargetRefuses(t *testing.T) {
 	}
 }
 
+// TestForwardCancellationInterruptsTargetDial guards shutdown while a bastion
+// has received a channel-open request but has not accepted or rejected it.
+func TestForwardCancellationInterruptsTargetDial(t *testing.T) {
+	keyPEM, authorizedKey := sshtest.GenerateClientKey(t)
+	channelOpened := make(chan struct{}, 1)
+	sshPort := sshtest.StartServerWithChannelHandler(t, authorizedKey, func(ssh.NewChannel) {
+		channelOpened <- struct{}{}
+		// Deliberately leave the channel-open request unanswered.
+	})
+	clientCfg, err := clientConfig(TunnelConfig{SSHUser: sshtest.User, SSHKey: keyPEM})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(sshPort))
+	clients := &clientPool{dial: func(ctx context.Context) (*ssh.Client, error) {
+		return dialSSH(ctx, sshAddr, clientCfg)
+	}}
+	t.Cleanup(clients.close)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	fwd := newForwarder(listener, clients, "tcp", "target.internal:443")
+	served := make(chan error, 1)
+	go func() { served <- fwd.Serve(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		fwd.Close()
+	})
+
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	select {
+	case <-channelOpened:
+	case <-time.After(time.Second):
+		t.Fatal("bastion did not receive the target channel-open request")
+	}
+
+	cancel()
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatalf("Serve() = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Serve() did not return after cancellation")
+	}
+}
+
 // TestForwardToUnixSocket exercises the target_socket path, which forwards over a
 // direct-streamlocal channel rather than direct-tcpip.
 func TestForwardToUnixSocket(t *testing.T) {
@@ -245,6 +303,35 @@ func TestRunTunnelReportsBadCredentials(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no SSH credentials") {
 		t.Fatalf("error = %v, want it to name the missing credentials", err)
+	}
+}
+
+// TestRunTunnelReportsUnreachableTarget preserves the startup contract: ready
+// means both the SSH connection and the configured target have been reached.
+func TestRunTunnelReportsUnreachableTarget(t *testing.T) {
+	keyPEM, authorizedKey := sshtest.GenerateClientKey(t)
+	localPort, err := libs.GetFreePort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	missingSocket := filepath.Join(t.TempDir(), "missing.sock")
+	err = runTunnel(ctx, TunnelConfig{
+		LocalHost:    "127.0.0.1",
+		LocalPort:    localPort,
+		SSHHost:      "127.0.0.1",
+		SSHKey:       keyPEM,
+		SSHPort:      sshtest.StartServer(t, authorizedKey),
+		SSHUser:      sshtest.User,
+		TargetSocket: missingSocket,
+	})
+	if err == nil {
+		t.Fatal("runTunnel() = nil, want an unreachable-target error")
+	}
+	if !strings.Contains(err.Error(), "connect to SSH target "+missingSocket) {
+		t.Fatalf("error = %v, want it to identify the unreachable target", err)
 	}
 }
 

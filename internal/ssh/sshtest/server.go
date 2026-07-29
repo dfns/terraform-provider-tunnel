@@ -57,6 +57,17 @@ func GenerateClientKey(t testing.TB) (string, ssh.PublicKey) {
 // cleanup.
 func StartServer(t testing.TB, authorizedKey ssh.PublicKey) int {
 	t.Helper()
+	return StartServerWithChannelHandler(t, authorizedKey, handleChannel)
+}
+
+// StartServerWithChannelHandler starts a server whose forwarding channels are
+// handled by handle. Tests can use it to model channel-open edge cases.
+func StartServerWithChannelHandler(
+	t testing.TB,
+	authorizedKey ssh.PublicKey,
+	handle func(ssh.NewChannel),
+) int {
+	t.Helper()
 
 	_, hostSigner := newEd25519Signer(t)
 	config := &ssh.ServerConfig{
@@ -81,7 +92,7 @@ func StartServer(t testing.TB, authorizedKey ssh.PublicKey) int {
 			if err != nil {
 				return // listener closed during cleanup
 			}
-			go handleSSHConn(conn, config)
+			go handleSSHConn(conn, config, handle)
 		}
 	}()
 
@@ -92,7 +103,7 @@ func StartServer(t testing.TB, authorizedKey ssh.PublicKey) int {
 	return addr.Port
 }
 
-func handleSSHConn(c net.Conn, config *ssh.ServerConfig) {
+func handleSSHConn(c net.Conn, config *ssh.ServerConfig, handle func(ssh.NewChannel)) {
 	sshConn, chans, reqs, err := ssh.NewServerConn(c, config)
 	if err != nil {
 		return // handshake/auth failure
@@ -102,14 +113,18 @@ func handleSSHConn(c net.Conn, config *ssh.ServerConfig) {
 	go ssh.DiscardRequests(reqs)
 
 	for nc := range chans {
-		switch nc.ChannelType() {
-		case "direct-tcpip":
-			go handleDirectTCPIP(nc)
-		case "direct-streamlocal@openssh.com":
-			go handleStreamLocal(nc)
-		default:
-			_ = nc.Reject(ssh.UnknownChannelType, "unsupported channel type")
-		}
+		go handle(nc)
+	}
+}
+
+func handleChannel(nc ssh.NewChannel) {
+	switch nc.ChannelType() {
+	case "direct-tcpip":
+		handleDirectTCPIP(nc)
+	case "direct-streamlocal@openssh.com":
+		handleStreamLocal(nc)
+	default:
+		_ = nc.Reject(ssh.UnknownChannelType, "unsupported channel type")
 	}
 }
 
