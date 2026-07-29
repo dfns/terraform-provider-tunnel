@@ -1,13 +1,14 @@
 package provider
 
 import (
+	"os/user"
 	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// TestValidateSSHTarget exercises every branch of the target validation: the
+// TestValidateSSHTarget exercises every branch of SSH target validation: the
 // two valid shapes (host+port, socket) and the three rejected ones (both set,
 // neither set, port without a host).
 func TestValidateSSHTarget(t *testing.T) {
@@ -79,5 +80,42 @@ func TestValidateSSHTarget(t *testing.T) {
 				t.Fatalf("error %q does not contain %q", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestSSHConfigDefaults(t *testing.T) {
+	currentUser, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := SSHModel{
+		LocalHost:    types.StringNull(),
+		LocalPort:    types.Int64Value(15432),
+		SSHHost:      types.StringValue("bastion.internal"),
+		SSHPort:      types.Int64Null(),
+		SSHUser:      types.StringNull(),
+		TargetHost:   types.StringValue("db.internal"),
+		TargetPort:   types.Int64Value(5432),
+		TargetSocket: types.StringNull(),
+	}
+
+	cfg, err := sshConfig(&data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LocalHost != "localhost" || cfg.LocalPort != 15432 {
+		t.Fatalf("local endpoint = %s:%d, want localhost:15432", cfg.LocalHost, cfg.LocalPort)
+	}
+	if cfg.SSHHost != "bastion.internal" || cfg.SSHPort != 22 || cfg.SSHUser != currentUser.Username {
+		t.Fatalf("SSH endpoint defaults not applied: %+v", cfg)
+	}
+	if cfg.TargetHost != "db.internal" || cfg.TargetPort != 5432 || cfg.TargetSocket != "" {
+		t.Fatalf("target not mapped: %+v", cfg)
+	}
+	if data.LocalHost.ValueString() != cfg.LocalHost ||
+		data.LocalPort.ValueInt64() != int64(cfg.LocalPort) ||
+		data.SSHPort.ValueInt64() != int64(cfg.SSHPort) ||
+		data.SSHUser.ValueString() != cfg.SSHUser {
+		t.Fatalf("model not updated: %+v", data)
 	}
 }

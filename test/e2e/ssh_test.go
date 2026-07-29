@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/dfns/terraform-provider-tunnel/internal/sshtest"
+	"github.com/dfns/terraform-provider-tunnel/internal/ssh/sshtest"
 )
 
 const sshTargetBody = "tunnel-e2e-ok"

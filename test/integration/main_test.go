@@ -16,7 +16,7 @@ import (
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/runner"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssh"
-	"github.com/dfns/terraform-provider-tunnel/internal/sshtest"
+	"github.com/dfns/terraform-provider-tunnel/internal/ssh/sshtest"
 )
 
 // Helper-process re-exec scaffold.
