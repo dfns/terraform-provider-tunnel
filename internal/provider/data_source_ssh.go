@@ -93,12 +93,12 @@ func (d *SSHDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 		return
 	}
 
-	cfg, err := sshConfig(&data)
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid SSH tunnel configuration", err.Error())
+	cfg, diags := sshConfig(&data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err = ssh.ForkRemoteTunnel(ctx, cfg)
+	_, err := ssh.ForkRemoteTunnel(ctx, cfg)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to fork tunnel process", fmt.Sprintf("Error: %s", err))
 		return

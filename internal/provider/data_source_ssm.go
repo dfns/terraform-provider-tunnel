@@ -3,13 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strconv"
 
-	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -21,19 +18,6 @@ func NewSSMDataSource() datasource.DataSource {
 
 // SSMDataSource defines the data source implementation.
 type SSMDataSource struct{}
-
-// SSMDataSourceModel describes the data source data model.
-type SSMDataSourceModel struct {
-	LocalHost   types.String `tfsdk:"local_host"`
-	LocalPort   types.Int64  `tfsdk:"local_port"`
-	SSMInstance types.String `tfsdk:"ssm_instance"`
-	SSMDocument types.String `tfsdk:"ssm_document"`
-	SSMProfile  types.String `tfsdk:"ssm_profile"`
-	SSMRoleARN  types.String `tfsdk:"ssm_role_arn"`
-	SSMRegion   types.String `tfsdk:"ssm_region"`
-	TargetHost  types.String `tfsdk:"target_host"`
-	TargetPort  types.Int64  `tfsdk:"target_port"`
-}
 
 func (d *SSMDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ssm"
@@ -91,7 +75,7 @@ func (d *SSMDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 }
 
 func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data SSMDataSourceModel
+	var data SSMModel
 
 	// Read Terraform configuration data into the model
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
@@ -100,57 +84,13 @@ func (d *SSMDataSource) Read(ctx context.Context, req datasource.ReadRequest, re
 		return
 	}
 
-	appendSSMTunnelValidationDiagnostics(&resp.Diagnostics, data.TargetHost, data.TargetPort, data.SSMDocument)
+	tunnelCfg, awsCfg, diags := ssmConfig(ctx, &data)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	localPort := int(data.LocalPort.ValueInt64())
-	if localPort == 0 {
-		var err error
-		localPort, err = libs.GetFreePort()
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to find open port", fmt.Sprintf("Error: %s", err))
-			return
-		}
-	}
-
-	// Hardcoded in session manager plugin
-	// see: https://github.com/aws/session-manager-plugin/blob/mainline/src/sessionmanagerplugin/session/portsession/muxportforwarding.go#L245
-	data.LocalHost = types.StringValue("localhost")
-	data.LocalPort = types.Int64Value(int64(localPort))
-
-	tunnelCfg := ssm.TunnelConfig{
-		LocalPort:   strconv.Itoa(localPort),
-		SSMInstance: data.SSMInstance.ValueString(),
-		SSMDocument: data.SSMDocument.ValueString(),
-		SSMProfile:  data.SSMProfile.ValueString(),
-		SSMRoleARN:  data.SSMRoleARN.ValueString(),
-		SSMRegion:   data.SSMRegion.ValueString(),
-		TargetHost:  data.TargetHost.ValueString(),
-		TargetPort:  ssmTargetPortString(data.TargetPort),
-	}
-
-	awsCfg, err := ssm.GetNewSDKConfig(ctx, tunnelCfg)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to initialize AWS SDK", fmt.Sprintf("Error: %s", err))
-		return
-	}
-
-	tunnelCfg.SSMRegion = awsCfg.Region
-	tunnelCfg.SSMProfile = ssm.GetSDKConfigProfile(awsCfg)
-
-	// Only update SSMRoleARN if it wasn't explicitly provided
-	if tunnelCfg.SSMRoleARN == "" {
-		tunnelCfg.SSMRoleARN = ssm.GetSDKConfigRole(awsCfg)
-	}
-
-	data.SSMRegion = types.StringValue(tunnelCfg.SSMRegion)
-	data.SSMProfile = types.StringValue(tunnelCfg.SSMProfile)
-	data.SSMRoleARN = types.StringValue(tunnelCfg.SSMRoleARN)
-
-	_, err = ssm.ForkRemoteTunnel(ctx, awsCfg, tunnelCfg)
-	if err != nil {
+	if _, err := ssm.ForkRemoteTunnel(ctx, awsCfg, tunnelCfg); err != nil {
 		resp.Diagnostics.AddError("Failed to fork tunnel process", fmt.Sprintf("Error: %s", err))
 		return
 	}

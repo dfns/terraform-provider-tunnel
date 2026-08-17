@@ -1,12 +1,11 @@
 package provider
 
 import (
-	"errors"
-	"fmt"
 	"os/user"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssh"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -24,23 +23,36 @@ type SSHModel struct {
 	TargetSocket     types.String `tfsdk:"target_socket"`
 }
 
-func validateSSHTarget(targetHost, targetSocket types.String, targetPort types.Int64) error {
+func validateSSHTarget(targetHost, targetSocket types.String, targetPort types.Int64) diag.Diagnostics {
+	var diags diag.Diagnostics
+
 	hasPort := !targetPort.IsNull()
 	hasSocket := !targetSocket.IsNull() && targetSocket.ValueString() != ""
 	switch {
 	case hasPort && hasSocket:
-		return errors.New("`target_port` and `target_socket` are mutually exclusive")
+		diags.AddError(
+			"Conflicting SSH tunnel target",
+			"`target_port` and `target_socket` are mutually exclusive",
+		)
 	case !hasPort && !hasSocket:
-		return errors.New("one of `target_port` or `target_socket` must be set")
+		diags.AddError(
+			"Missing SSH tunnel target",
+			"one of `target_port` or `target_socket` must be set",
+		)
 	case hasPort && (targetHost.IsNull() || targetHost.ValueString() == ""):
-		return errors.New("`target_host` is required when `target_port` is set")
+		diags.AddError(
+			"Missing target_host",
+			"`target_host` is required when `target_port` is set",
+		)
 	}
-	return nil
+
+	return diags
 }
 
-func sshConfig(data *SSHModel) (ssh.TunnelConfig, error) {
-	if err := validateSSHTarget(data.TargetHost, data.TargetSocket, data.TargetPort); err != nil {
-		return ssh.TunnelConfig{}, err
+func sshConfig(data *SSHModel) (ssh.TunnelConfig, diag.Diagnostics) {
+	diags := validateSSHTarget(data.TargetHost, data.TargetSocket, data.TargetPort)
+	if diags.HasError() {
+		return ssh.TunnelConfig{}, diags
 	}
 
 	localPort := int(data.LocalPort.ValueInt64())
@@ -48,7 +60,8 @@ func sshConfig(data *SSHModel) (ssh.TunnelConfig, error) {
 		var err error
 		localPort, err = libs.GetFreePort()
 		if err != nil {
-			return ssh.TunnelConfig{}, fmt.Errorf("find open local port: %w", err)
+			diags.AddError("Failed to find open local port", err.Error())
+			return ssh.TunnelConfig{}, diags
 		}
 		data.LocalPort = types.Int64Value(int64(localPort))
 	}
@@ -59,7 +72,8 @@ func sshConfig(data *SSHModel) (ssh.TunnelConfig, error) {
 	if data.SSHUser.IsNull() {
 		currentUser, err := user.Current()
 		if err != nil {
-			return ssh.TunnelConfig{}, fmt.Errorf("get current user: %w", err)
+			diags.AddError("Failed to determine the current user", err.Error())
+			return ssh.TunnelConfig{}, diags
 		}
 		data.SSHUser = types.StringValue(currentUser.Username)
 	}
@@ -79,5 +93,5 @@ func sshConfig(data *SSHModel) (ssh.TunnelConfig, error) {
 		TargetHost:       data.TargetHost.ValueString(),
 		TargetPort:       int(data.TargetPort.ValueInt64()),
 		TargetSocket:     data.TargetSocket.ValueString(),
-	}, nil
+	}, diags
 }

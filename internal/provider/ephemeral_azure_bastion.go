@@ -63,9 +63,9 @@ func (d *AzureBastionEphemeral) Open(ctx context.Context, req ephemeral.OpenRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	cfg, err := azureBastionConfig(&data)
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid Azure Bastion tunnel configuration", err.Error())
+	cfg, diags := azureBastionConfig(&data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	cmd, err := azurebastion.ForkRemoteTunnel(ctx, cfg)

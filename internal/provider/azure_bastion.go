@@ -1,10 +1,9 @@
 package provider
 
 import (
-	"fmt"
-
 	"github.com/dfns/terraform-provider-tunnel/internal/azurebastion"
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -17,7 +16,9 @@ type AzureBastionModel struct {
 	LocalPort        types.Int64  `tfsdk:"local_port"`
 }
 
-func azureBastionConfig(data *AzureBastionModel) (azurebastion.TunnelConfig, error) {
+func azureBastionConfig(data *AzureBastionModel) (azurebastion.TunnelConfig, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
 	if data.LocalHost.IsNull() || data.LocalHost.ValueString() == "" {
 		data.LocalHost = types.StringValue(azurebastion.DefaultLocalHost)
 	}
@@ -26,7 +27,8 @@ func azureBastionConfig(data *AzureBastionModel) (azurebastion.TunnelConfig, err
 		var err error
 		localPort, err = libs.GetFreePort()
 		if err != nil {
-			return azurebastion.TunnelConfig{}, fmt.Errorf("find open local port: %w", err)
+			diags.AddError("Failed to find open local port", err.Error())
+			return azurebastion.TunnelConfig{}, diags
 		}
 		data.LocalPort = types.Int64Value(int64(localPort))
 	}
@@ -39,7 +41,9 @@ func azureBastionConfig(data *AzureBastionModel) (azurebastion.TunnelConfig, err
 		LocalPort:        localPort,
 	}
 	if err := cfg.Validate(); err != nil {
-		return azurebastion.TunnelConfig{}, err
+		diags.AddError("Invalid Azure Bastion tunnel configuration", err.Error())
+		return azurebastion.TunnelConfig{}, diags
 	}
-	return cfg, nil
+
+	return cfg, diags
 }
