@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"strconv"
+	"sync"
 
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,42 +56,8 @@ type ExecConfig struct {
 }
 
 func ForkRemoteTunnel(ctx context.Context, cfg TunnelConfig) (*exec.Cmd, error) {
-	tunnelCfgJson, err := json.Marshal(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	// Open a log file for the tunnel
-	tunnelLogPath := libs.TunnelLogPath(fmt.Sprintf("k8s-tunnel-%s-%s-%d.log", cfg.Namespace, cfg.ServiceName, cfg.TargetPort))
-	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, err
-	}
-
-	// Prepare the command
-	cmd := exec.Command(os.Args[0], strconv.Itoa(os.Getppid()))
-
-	// Append tunnel config environment variable to pass parameters to the child process
-	cmd.Env = append(
-		os.Environ(),
-		fmt.Sprintf("%s=%s", libs.TunnelTypeEnv, TunnelType),
-		fmt.Sprintf("%s=%s", libs.TunnelConfEnv, string(tunnelCfgJson)),
-	)
-
-	// Redirect stdout and stderr to log file
-	cmd.Stdout = tunnelLogFile
-	cmd.Stderr = tunnelLogFile
-
-	// Run the command in the background
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-
-	if err = libs.WaitForPort(cmd.Process.Pid, cfg.LocalHost, strconv.Itoa(cfg.LocalPort)); err != nil {
-		return nil, fmt.Errorf("%w. check %s for more information", err, tunnelLogPath)
-	}
-
-	return cmd, nil
+	logName := fmt.Sprintf("k8s-tunnel-%s-%s-%d.log", cfg.Namespace, cfg.ServiceName, cfg.TargetPort)
+	return libs.ForkTunnel(ctx, TunnelType, logName, cfg)
 }
 
 func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err error) {
@@ -221,6 +187,10 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 
 	stopChan := make(chan struct{}, 1)
 	readyChan := make(chan struct{})
+	// Both the interrupt handler and a failed readiness signal can stop the
+	// forwarder, and closing stopChan twice would panic.
+	var stopOnce sync.Once
+	stop := func() { stopOnce.Do(func() { close(stopChan) }) }
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", req.URL())
 
@@ -243,12 +213,20 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 	go func() {
 		<-c
 		log.Println("stopping tunnel: received interrupt signal")
-		close(stopChan)
+		stop()
 	}()
 
+	readyErr := make(chan error, 1)
 	go func() {
 		<-readyChan
 		log.Println("port forwarding is ready")
+		err := libs.SignalReadyIfRequested()
+		readyErr <- err
+		if err != nil {
+			// The parent will never see this tunnel as ready, so serving it is
+			// pointless: stop forwarding and let the error surface in the log.
+			stop()
+		}
 	}()
 
 	if err := pf.ForwardPorts(); err != nil {
@@ -256,5 +234,10 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 		return err
 	}
 
-	return nil
+	select {
+	case err := <-readyErr:
+		return err
+	default:
+		return nil
+	}
 }
