@@ -70,14 +70,16 @@ func TestValidateSSHTarget(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateSSHTarget(tt.targetHost, tt.socket, tt.port)
+			diags := validateSSHTarget(tt.targetHost, tt.socket, tt.port)
 			switch {
-			case tt.wantErr == "" && err != nil:
-				t.Fatalf("unexpected error: %v", err)
-			case tt.wantErr != "" && err == nil:
-				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
-			case tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr):
-				t.Fatalf("error %q does not contain %q", err, tt.wantErr)
+			case tt.wantErr == "" && diags.HasError():
+				t.Fatalf("unexpected diagnostics: %v", diags)
+			case tt.wantErr != "" && !diags.HasError():
+				t.Fatalf("expected a diagnostic mentioning %q, got none", tt.wantErr)
+			case tt.wantErr != "":
+				if detail := diags.Errors()[0].Detail(); !strings.Contains(detail, tt.wantErr) {
+					t.Fatalf("diagnostic detail %q does not contain %q", detail, tt.wantErr)
+				}
 			}
 		})
 	}
@@ -99,9 +101,9 @@ func TestSSHConfigDefaults(t *testing.T) {
 		TargetSocket: types.StringNull(),
 	}
 
-	cfg, err := sshConfig(&data)
-	if err != nil {
-		t.Fatal(err)
+	cfg, diags := sshConfig(&data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
 	if cfg.LocalHost != "localhost" || cfg.LocalPort != 15432 {
 		t.Fatalf("local endpoint = %s:%d, want localhost:15432", cfg.LocalHost, cfg.LocalPort)

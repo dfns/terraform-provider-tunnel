@@ -4,7 +4,6 @@ import (
 	"context"
 
 	k8s "github.com/dfns/terraform-provider-tunnel/internal/kubernetes"
-	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -19,15 +18,6 @@ func NewKubernetesDataSource() datasource.DataSource {
 }
 
 type KubernetesDataSource struct{}
-
-type KubernetesDataSourceModel struct {
-	Namespace   types.String           `tfsdk:"namespace"`
-	ServiceName types.String           `tfsdk:"service_name"`
-	TargetPort  types.Int64            `tfsdk:"target_port"`
-	LocalPort   types.Int64            `tfsdk:"local_port"`
-	LocalHost   types.String           `tfsdk:"local_host"`
-	Kubernetes  *KubernetesConfigModel `tfsdk:"kubernetes"`
-}
 
 func (d *KubernetesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_kubernetes"
@@ -162,91 +152,20 @@ func (d *KubernetesDataSource) Schema(ctx context.Context, req datasource.Schema
 }
 
 func (d *KubernetesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data KubernetesDataSourceModel
+	var data KubernetesModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	localPort := int(data.LocalPort.ValueInt64())
-	if localPort == 0 {
-		var err error
-		localPort, err = libs.GetFreePort()
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to get free port", err.Error())
-			return
-		}
+	tunnelCfg, diags := kubernetesConfig(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	data.LocalPort = types.Int64Value(int64(localPort))
-
-	if data.LocalHost.IsNull() {
-		data.LocalHost = types.StringValue("localhost")
-	}
-
-	tunnelCfg := k8s.TunnelConfig{
-		Namespace:   data.Namespace.ValueString(),
-		ServiceName: data.ServiceName.ValueString(),
-		TargetPort:  int(data.TargetPort.ValueInt64()),
-		LocalHost:   data.LocalHost.ValueString(),
-		LocalPort:   localPort,
-	}
-
-	if data.Kubernetes != nil {
-		tunnelCfg.Host = data.Kubernetes.Host.ValueString()
-		tunnelCfg.Username = data.Kubernetes.Username.ValueString()
-		tunnelCfg.Password = data.Kubernetes.Password.ValueString()
-		tunnelCfg.Insecure = data.Kubernetes.Insecure.ValueBool()
-		tunnelCfg.TLSServerName = data.Kubernetes.TLSServerName.ValueString()
-		tunnelCfg.ClientCertificate = data.Kubernetes.ClientCertificate.ValueString()
-		tunnelCfg.ClientKey = data.Kubernetes.ClientKey.ValueString()
-		tunnelCfg.ClusterCACertificate = data.Kubernetes.ClusterCACertificate.ValueString()
-		tunnelCfg.ConfigPath = data.Kubernetes.ConfigPath.ValueString()
-		tunnelCfg.ConfigContext = data.Kubernetes.ConfigContext.ValueString()
-		tunnelCfg.ConfigContextAuthInfo = data.Kubernetes.ConfigContextAuthInfo.ValueString()
-		tunnelCfg.ConfigContextCluster = data.Kubernetes.ConfigContextCluster.ValueString()
-		tunnelCfg.Token = data.Kubernetes.Token.ValueString()
-		tunnelCfg.ProxyURL = data.Kubernetes.ProxyURL.ValueString()
-
-		if !data.Kubernetes.ConfigPaths.IsNull() {
-			var paths []string
-			resp.Diagnostics.Append(data.Kubernetes.ConfigPaths.ElementsAs(ctx, &paths, false)...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			tunnelCfg.ConfigPaths = paths
-		}
-
-		if data.Kubernetes.Exec != nil && !data.Kubernetes.Exec.APIVersion.IsNull() && !data.Kubernetes.Exec.Command.IsNull() {
-			execCfg := &k8s.ExecConfig{
-				APIVersion: data.Kubernetes.Exec.APIVersion.ValueString(),
-				Command:    data.Kubernetes.Exec.Command.ValueString(),
-			}
-
-			if !data.Kubernetes.Exec.Env.IsNull() {
-				var env map[string]string
-				resp.Diagnostics.Append(data.Kubernetes.Exec.Env.ElementsAs(ctx, &env, false)...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				execCfg.Env = env
-			}
-
-			if !data.Kubernetes.Exec.Args.IsNull() {
-				var args []string
-				resp.Diagnostics.Append(data.Kubernetes.Exec.Args.ElementsAs(ctx, &args, false)...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				execCfg.Args = args
-			}
-			tunnelCfg.Exec = execCfg
-		}
-	}
-
-	_, err := k8s.ForkRemoteTunnel(ctx, tunnelCfg)
-	if err != nil {
+	if _, err := k8s.ForkRemoteTunnel(ctx, tunnelCfg); err != nil {
 		resp.Diagnostics.AddError("Failed to start tunnel", err.Error())
 		return
 	}

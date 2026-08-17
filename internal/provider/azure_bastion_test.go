@@ -16,9 +16,9 @@ func TestAzureBastionConfigDefaultsAndValidation(t *testing.T) {
 		LocalHost:        types.StringNull(),
 		LocalPort:        types.Int64Value(15432),
 	}
-	cfg, err := azureBastionConfig(&data)
-	if err != nil {
-		t.Fatal(err)
+	cfg, diags := azureBastionConfig(&data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
 	if cfg.LocalHost != "localhost" || cfg.LocalPort != 15432 {
 		t.Fatalf("defaults not applied: %+v", cfg)
@@ -28,8 +28,12 @@ func TestAzureBastionConfigDefaultsAndValidation(t *testing.T) {
 	}
 
 	data.TargetIPAddress = types.StringValue("10.0.1.4")
-	if _, err := azureBastionConfig(&data); err == nil || !strings.Contains(err.Error(), "exactly one") {
-		t.Fatalf("expected mutually exclusive target error, got %v", err)
+	_, diags = azureBastionConfig(&data)
+	if !diags.HasError() {
+		t.Fatal("expected a mutually exclusive target diagnostic, got none")
+	}
+	if detail := diags.Errors()[0].Detail(); !strings.Contains(detail, "exactly one") {
+		t.Fatalf("diagnostic detail %q does not mention the conflict", detail)
 	}
 }
 
@@ -50,9 +54,9 @@ func TestAzureBastionConfigAllocatesFreeLocalPort(t *testing.T) {
 				LocalHost:        types.StringNull(),
 				LocalPort:        tt.localPort,
 			}
-			cfg, err := azureBastionConfig(&data)
-			if err != nil {
-				t.Fatal(err)
+			cfg, diags := azureBastionConfig(&data)
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %v", diags)
 			}
 			if cfg.LocalPort == 0 {
 				t.Fatal("no local port allocated")

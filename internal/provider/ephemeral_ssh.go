@@ -95,9 +95,9 @@ func (d *SSHEphemeral) Open(ctx context.Context, req ephemeral.OpenRequest, resp
 		return
 	}
 
-	cfg, err := sshConfig(&data)
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid SSH tunnel configuration", err.Error())
+	cfg, diags := sshConfig(&data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	cmd, err := ssh.ForkRemoteTunnel(ctx, cfg)
