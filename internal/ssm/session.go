@@ -10,8 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-const DEFAULT_SSM_ENV_NAME = "AWS_SSM_START_SESSION_RESPONSE"
-
 // Default SSM document for port forwarding.
 const DefaultSSMDocument = "AWS-StartPortForwardingSessionToRemoteHost"
 
@@ -24,6 +22,10 @@ type TunnelConfig struct {
 	SSMRegion   string
 	TargetHost  string
 	TargetPort  string
+
+	// SessionParams is set by the parent to hand the started session to the
+	// forked child, and is unset everywhere else.
+	SessionParams *SessionParams `json:",omitempty"`
 }
 
 type SessionParams struct {

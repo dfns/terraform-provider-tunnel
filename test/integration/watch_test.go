@@ -90,53 +90,9 @@ func TestInterruptTerminatesProcess(t *testing.T) {
 		"process still alive after Interrupt")
 }
 
-// TestWaitForPort covers the readiness probe SSM and Kubernetes forks use: it
-// returns once the port is reachable, and bails out immediately if the forked
-// process dies instead of blocking for the full timeout.
-func TestWaitForPort(t *testing.T) {
-	t.Run("returns once the port is reachable", func(t *testing.T) {
-		sleeper := spawnHelper(t, modeSleeper)
-
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatalf("listening: %v", err)
-		}
-		t.Cleanup(func() { _ = ln.Close() })
-		_, portStr, err := net.SplitHostPort(ln.Addr().String())
-		if err != nil {
-			t.Fatalf("splitting listener addr: %v", err)
-		}
-
-		if err := libs.WaitForPort(sleeper.Process.Pid, "127.0.0.1", portStr); err != nil {
-			t.Fatalf("WaitForPort: %v", err)
-		}
-	})
-
-	t.Run("fails fast when the process has exited", func(t *testing.T) {
-		sleeper := spawnHelper(t, modeSleeper)
-		pid := sleeper.Process.Pid
-		_ = sleeper.Process.Kill()
-		_ = sleeper.Wait()
-
-		port, err := libs.GetFreePort()
-		if err != nil {
-			t.Fatalf("allocating free port: %v", err)
-		}
-
-		start := time.Now()
-		err = libs.WaitForPort(pid, "127.0.0.1", strconv.Itoa(port))
-		if err == nil {
-			t.Fatal("expected an error once the process exited")
-		}
-		if elapsed := time.Since(start); elapsed > 10*time.Second {
-			t.Fatalf("WaitForPort did not fail fast: took %s", elapsed)
-		}
-	})
-}
-
-// TestWaitForReadyFile covers the readiness handshake the SSH fork uses: the
-// child SignalReady writes the sentinel file and WaitForReadyFile returns once
-// it appears, while a dead process aborts the wait promptly.
+// TestWaitForReadyFile covers the readiness handshake every tunnel fork uses:
+// the child SignalReady writes the sentinel file and WaitForReadyFile returns
+// once it appears, while a dead process aborts the wait promptly.
 func TestWaitForReadyFile(t *testing.T) {
 	t.Run("returns once the ready file exists", func(t *testing.T) {
 		sleeper := spawnHelper(t, modeSleeper)

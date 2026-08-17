@@ -3,10 +3,11 @@ package ssm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
-	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -30,59 +31,23 @@ func GetEndpoint(ctx context.Context, region string) (string, error) {
 }
 
 func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) (*exec.Cmd, error) {
-	// First we start a session using AWS SDK
-	// see https://github.com/aws/aws-cli/blob/master/awscli/customizations/sessionmanager.py#L104
+	// The session is started here rather than in the child so that credential
+	// resolution stays in the provider process, as the AWS CLI does before
+	// handing the response to the plugin, last checked at
+	// https://github.com/aws/aws-cli/blob/5ad8dc60682d72edf21be96f0a591402f91ee45e/awscli/customizations/sessionmanager.py
 	sessionParams, err := StartTunnelSession(ctx, awsCfg, cfg)
 	if err != nil {
 		return nil, err
 	}
-	sessionParamsJson, err := json.Marshal(sessionParams)
-	if err != nil {
-		return nil, err
-	}
+	cfg.SessionParams = &sessionParams
 
-	tunnelCfgJson, err := json.Marshal(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	// Open a log file for the tunnel
 	logPort := cfg.TargetPort
 	if logPort == "" {
 		logPort = cfg.LocalPort
 	}
-	tunnelLogPath := libs.TunnelLogPath(fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, logPort))
-	tunnelLogFile, err := os.OpenFile(tunnelLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, err
-	}
+	logName := fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, logPort)
 
-	// Prepare the command
-	cmd := exec.Command(os.Args[0], strconv.Itoa(os.Getppid()))
-
-	// Append special environment variable to pass session parameters to the child process
-	// see https://github.com/aws/aws-cli/blob/master/awscli/customizations/sessionmanager.py#L140
-	cmd.Env = append(
-		os.Environ(),
-		fmt.Sprintf("%s=%s", libs.TunnelTypeEnv, TunnelType),
-		fmt.Sprintf("%s=%s", libs.TunnelConfEnv, string(tunnelCfgJson)),
-		fmt.Sprintf("%s=%s", DEFAULT_SSM_ENV_NAME, string(sessionParamsJson)),
-	)
-
-	// Redirect stdout and stderr to log file
-	cmd.Stdout = tunnelLogFile
-	cmd.Stderr = tunnelLogFile
-
-	// Run the command in the background
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-
-	if err = libs.WaitForPort(cmd.Process.Pid, "localhost", cfg.LocalPort); err != nil {
-		return nil, fmt.Errorf("%w. check %s for more information", err, tunnelLogPath)
-	}
-
-	return cmd, nil
+	return libs.ForkTunnel(ctx, TunnelType, logName, cfg)
 }
 
 func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err error) {
@@ -90,9 +55,17 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 	if err := json.Unmarshal([]byte(cfgJson), &cfg); err != nil {
 		return err
 	}
+	if cfg.SessionParams == nil {
+		return errors.New("missing SSM session parameters")
+	}
 
 	// Watch parent process lifecycle ie. main terraform process
 	err = libs.WatchProcess(parentPid)
+	if err != nil {
+		return err
+	}
+
+	sessionParamsJson, err := json.Marshal(cfg.SessionParams)
 	if err != nil {
 		return err
 	}
@@ -108,15 +81,27 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err 
 		return err
 	}
 
+	// Positional layout copied from the AWS CLI, last checked at
+	// https://github.com/aws/aws-cli/blob/5ad8dc60682d72edf21be96f0a591402f91ee45e/awscli/customizations/sessionmanager.py
+	// Newer CLIs hand the plugin an env var name here instead, but the vendored
+	// plugin only reads the response itself from this argument.
 	args := []string{
 		"session-manager-plugin",
-		os.Getenv(DEFAULT_SSM_ENV_NAME),
+		string(sessionParamsJson),
 		cfg.SSMRegion,
 		"StartSession",
 		cfg.SSMProfile,
 		string(sessionInputJson),
 		endpointUrl,
 	}
+
+	// The plugin blocks for the tunnel's lifetime and exposes no readiness hook,
+	// so readiness is reported from the outside once it binds the local port.
+	go func() {
+		if err := libs.SignalReadyWhenServing(ctx, "localhost", cfg.LocalPort); err != nil {
+			log.Printf("failed to signal tunnel readiness: %v", err)
+		}
+	}()
 
 	// call session-manager-plugin to start the tunnel
 	pluginSession.ValidateInputAndStartSession(args, os.Stdout)
