@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	k8s "github.com/dfns/terraform-provider-tunnel/internal/kubernetes"
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
@@ -49,7 +50,26 @@ type ExecConfigModel struct {
 func kubernetesConfig(ctx context.Context, data *KubernetesModel) (k8s.TunnelConfig, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	localPort := int(data.LocalPort.ValueInt64())
+	targetPort := data.TargetPort.ValueInt64()
+	if targetPort < 1 || targetPort > 65535 {
+		diags.AddError(
+			"Invalid Kubernetes target port",
+			fmt.Sprintf("target_port must be between 1 and 65535, got %d", targetPort),
+		)
+		return k8s.TunnelConfig{}, diags
+	}
+
+	// A zero local_port means "allocate one", so only an explicit value is checked.
+	requestedLocalPort := data.LocalPort.ValueInt64()
+	if requestedLocalPort < 0 || requestedLocalPort > 65535 {
+		diags.AddError(
+			"Invalid Kubernetes local port",
+			fmt.Sprintf("local_port must be between 1 and 65535, got %d", requestedLocalPort),
+		)
+		return k8s.TunnelConfig{}, diags
+	}
+
+	localPort := int(requestedLocalPort)
 	if localPort == 0 {
 		var err error
 		localPort, err = libs.GetFreePort()
@@ -67,7 +87,7 @@ func kubernetesConfig(ctx context.Context, data *KubernetesModel) (k8s.TunnelCon
 	cfg := k8s.TunnelConfig{
 		Namespace:   data.Namespace.ValueString(),
 		ServiceName: data.ServiceName.ValueString(),
-		TargetPort:  int(data.TargetPort.ValueInt64()),
+		TargetPort:  int(targetPort),
 		LocalHost:   data.LocalHost.ValueString(),
 		LocalPort:   localPort,
 	}

@@ -95,7 +95,7 @@ jobs:
           go-version-file: "go.mod"
           cache: true
       - run: go mod download
-      - run: go test -v -tags integration -timeout 120s ./test/integration/
+      - run: go test -v -count=1 -tags integration -timeout 120s ./test/integration/
 
   # End-to-end: build the real provider and drive it through `terraform apply`
   # against live fixtures, so OS-specific regressions in the fork/process-watch
@@ -125,15 +125,16 @@ jobs:
         with:
           terraform_version: "1.10.5"
           terraform_wrapper: false
-      - run: go test -v -tags e2e -run TestSSHTunnelE2E -timeout 10m ./test/e2e/
+      - run: go test -v -count=1 -tags e2e -run TestSSHTunnelE2E -timeout 10m ./test/e2e/
 
-  # tunnel_kubernetes against a kind cluster, forwarding to the built-in CoreDNS
-  # metrics endpoint. Linux-only: kind needs a Linux Docker host.
+  # tunnel_kubernetes against a kind cluster: the built-in CoreDNS metrics
+  # endpoint, plus fixture workloads covering service/target port resolution
+  # and ready-pod selection. Linux-only: kind needs a Linux Docker host.
   k8s-e2e:
     name: Kubernetes tunnel
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -149,6 +150,6 @@ jobs:
           cluster_name: tunnel-e2e
       - name: Wait for CoreDNS
         run: kubectl wait --for=condition=Available deploy/coredns -n kube-system --timeout=120s
-      - run: go test -v -tags e2e -run TestKubernetesTunnelE2E -timeout 10m ./test/e2e/
+      - run: go test -v -count=1 -tags e2e -run 'TestKubernetes.*E2E' -timeout 15m ./test/e2e/
         env:
           E2E_KUBE_CONTEXT: kind-tunnel-e2e

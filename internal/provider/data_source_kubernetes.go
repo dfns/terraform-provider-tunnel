@@ -32,11 +32,11 @@ func (d *KubernetesDataSource) Schema(ctx context.Context, req datasource.Schema
 				Required:    true,
 			},
 			"service_name": schema.StringAttribute{
-				Description: "The name of the service to forward ports to.",
+				Description: "The name of the service to forward ports to. One ready pod is selected when the tunnel starts and is not re-selected, so the tunnel stops forwarding if that pod goes away.",
 				Required:    true,
 			},
 			"target_port": schema.Int64Attribute{
-				Description: "The port on the service to forward to.",
+				Description: "The port exposed by the service, between 1 and 65535. It is resolved to the pod's numeric or named `targetPort`; a port the service does not expose is forwarded directly to that port on the pod.",
 				Required:    true,
 			},
 			"local_host": schema.StringAttribute{
