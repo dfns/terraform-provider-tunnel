@@ -44,8 +44,8 @@ resource "postgresql_database" "my_db" {
 ### Required
 
 - `namespace` (String) The namespace of the service.
-- `service_name` (String) The name of the service to forward ports to.
-- `target_port` (Number) The port on the service to forward to.
+- `service_name` (String) The name of the service to forward ports to. One ready pod is selected when the tunnel starts and is not re-selected, so the tunnel stops forwarding if that pod goes away.
+- `target_port` (Number) The port exposed by the service, between 1 and 65535. It is resolved to the pod's numeric or named `targetPort`; a port the service does not expose is forwarded directly to that port on the pod.
 
 ### Optional
 

@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -34,6 +36,40 @@ func TestKubernetesConfigDefaults(t *testing.T) {
 	}
 	if data.LocalHost.ValueString() != cfg.LocalHost || data.LocalPort.ValueInt64() != int64(cfg.LocalPort) {
 		t.Fatalf("model not updated: %+v", data)
+	}
+}
+
+func TestKubernetesConfigRejectsInvalidTargetPort(t *testing.T) {
+	for _, port := range []int64{-1, 0, 65536, 4294967297} {
+		t.Run(fmt.Sprintf("port_%d", port), func(t *testing.T) {
+			data := minimalKubernetesModel()
+			data.TargetPort = types.Int64Value(port)
+
+			cfg, diags := kubernetesConfig(context.Background(), &data)
+			if !diags.HasError() {
+				t.Fatalf("target_port %d accepted with config %+v", port, cfg)
+			}
+			if !strings.Contains(diags.Errors()[0].Detail(), "between 1 and 65535") {
+				t.Fatalf("diagnostic = %v, want valid port range", diags)
+			}
+		})
+	}
+}
+
+func TestKubernetesConfigRejectsInvalidLocalPort(t *testing.T) {
+	for _, port := range []int64{-1, 65536, 4294967297} {
+		t.Run(fmt.Sprintf("port_%d", port), func(t *testing.T) {
+			data := minimalKubernetesModel()
+			data.LocalPort = types.Int64Value(port)
+
+			cfg, diags := kubernetesConfig(context.Background(), &data)
+			if !diags.HasError() {
+				t.Fatalf("local_port %d accepted with config %+v", port, cfg)
+			}
+			if !strings.Contains(diags.Errors()[0].Detail(), "between 1 and 65535") {
+				t.Fatalf("diagnostic = %v, want valid port range", diags)
+			}
+		})
 	}
 }
 

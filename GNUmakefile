@@ -19,10 +19,10 @@ test:
 	go test -v -cover -timeout=120s -parallel=10 ./...
 
 test-integration:
-	go test -v -tags integration -timeout=120s ./test/integration/
+	go test -v -count=1 -tags integration -timeout=120s ./test/integration/
 
 test-e2e:
-	go test -v -tags e2e -timeout=10m ./test/e2e/
+	go test -v -count=1 -tags e2e -timeout=10m ./test/e2e/
 
 testacc:
 	TF_ACC=1 go test -v -cover -timeout 120m ./...

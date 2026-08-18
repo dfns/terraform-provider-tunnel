@@ -166,7 +166,7 @@ provider "kubernetes" {
 
 ### Kubernetes Port Forwarding
 
-Establishes a port-forwarding session to a service or pod within a Kubernetes cluster directly via the Kubernetes API.
+Establishes a port-forwarding session to a service within a Kubernetes cluster directly via the Kubernetes API.
 This provider interacts directly with the Kubernetes API, supporting standard kubeconfig authentication.
 
 ```terraform
