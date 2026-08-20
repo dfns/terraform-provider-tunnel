@@ -35,7 +35,8 @@ func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) 
 	// resolution stays in the provider process, as the AWS CLI does before
 	// handing the response to the plugin, last checked at
 	// https://github.com/aws/aws-cli/blob/5ad8dc60682d72edf21be96f0a591402f91ee45e/awscli/customizations/sessionmanager.py
-	sessionParams, err := StartTunnelSession(ctx, awsCfg, cfg)
+	ssmClient := ssm.NewFromConfig(awsCfg)
+	sessionParams, err := startTunnelSession(ctx, ssmClient, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +48,13 @@ func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) 
 	}
 	logName := fmt.Sprintf("ssm-tunnel-%s-%s.log", cfg.SSMInstance, logPort)
 
-	return libs.ForkTunnel(ctx, TunnelType, logName, cfg)
+	cmd, err := libs.ForkTunnel(ctx, TunnelType, logName, cfg)
+	if err != nil {
+		if terr := terminateTunnelSession(ctx, ssmClient, sessionParams); terr != nil {
+			log.Printf("failed to terminate SSM session %s: %v", sessionParams.SessionId, terr)
+		}
+	}
+	return cmd, err
 }
 
 func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err error) {
