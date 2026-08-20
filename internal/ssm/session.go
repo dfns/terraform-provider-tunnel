@@ -2,6 +2,7 @@ package ssm
 
 import (
 	"context"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -12,6 +13,8 @@ import (
 
 // Default SSM document for port forwarding.
 const DefaultSSMDocument = "AWS-StartPortForwardingSessionToRemoteHost"
+
+const sessionCleanupTimeout = 10 * time.Second
 
 type TunnelConfig struct {
 	LocalPort   string
@@ -101,10 +104,7 @@ func CreateSessionInput(cfg TunnelConfig) ssm.StartSessionInput {
 	}
 }
 
-func StartTunnelSession(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) (SessionParams, error) {
-	// Create SSM client
-	ssmClient := ssm.NewFromConfig(awsCfg)
-
+func startTunnelSession(ctx context.Context, ssmClient *ssm.Client, cfg TunnelConfig) (SessionParams, error) {
 	// Make a request to start a session
 	sessionInput := CreateSessionInput(cfg)
 	sessionResponse, err := ssmClient.StartSession(ctx, &sessionInput)
@@ -117,4 +117,18 @@ func StartTunnelSession(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig
 		TokenValue: *sessionResponse.TokenValue,
 		StreamUrl:  *sessionResponse.StreamUrl,
 	}, nil
+}
+
+// terminateTunnelSession closes a session no plugin ever took over, which SSM
+// would otherwise hold until its idle timeout. Cancellation is stripped from
+// ctx because a done ctx is one way to reach this teardown, so the call gets a
+// deadline of its own instead.
+func terminateTunnelSession(ctx context.Context, ssmClient *ssm.Client, session SessionParams) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionCleanupTimeout)
+	defer cancel()
+
+	_, err := ssmClient.TerminateSession(ctx, &ssm.TerminateSessionInput{
+		SessionId: aws.String(session.SessionId),
+	})
+	return err
 }
