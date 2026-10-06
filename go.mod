@@ -7,7 +7,7 @@ toolchain go1.27.1
 replace github.com/aws/session-manager-plugin => github.com/formalco/session-manager-plugin v0.0.0-20250131230350-ea0a42ddcaf7
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.2
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.1
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v10 v10.0.0
 	github.com/aws/aws-sdk-go-v2 v1.47.0
