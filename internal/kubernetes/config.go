@@ -1,7 +1,11 @@
 package kubernetes
 
 import (
+	"cmp"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -42,24 +46,31 @@ type ExecConfig struct {
 }
 
 // restConfig assembles the client configuration from kubeconfig files plus the
-// explicit overrides carried in the tunnel config.
+// explicit overrides carried in the tunnel config. Like the hashicorp/kubernetes
+// provider, unset kubeconfig attributes fall back to KUBE_* env vars.
 func (c TunnelConfig) restConfig() (*rest.Config, error) {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	if len(c.ConfigPaths) > 0 {
-		loadingRules.Precedence = c.ConfigPaths
-	} else if c.ConfigPath != "" {
-		loadingRules.ExplicitPath = c.ConfigPath
+	configPaths, configPath := c.ConfigPaths, c.ConfigPath
+	if len(configPaths) == 0 && configPath == "" {
+		configPaths = filepath.SplitList(os.Getenv("KUBE_CONFIG_PATHS"))
+		configPath = os.Getenv("KUBE_CONFIG_PATH")
 	}
 
-	overrides := &clientcmd.ConfigOverrides{}
-	if c.ConfigContext != "" {
-		overrides.CurrentContext = c.ConfigContext
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if len(configPaths) > 0 {
+		loadingRules.Precedence = make([]string, len(configPaths))
+		for i, path := range configPaths {
+			loadingRules.Precedence[i] = expandHome(path)
+		}
+	} else if configPath != "" {
+		loadingRules.ExplicitPath = expandHome(configPath)
 	}
-	if c.ConfigContextAuthInfo != "" {
-		overrides.Context.AuthInfo = c.ConfigContextAuthInfo
-	}
-	if c.ConfigContextCluster != "" {
-		overrides.Context.Cluster = c.ConfigContextCluster
+
+	overrides := &clientcmd.ConfigOverrides{
+		CurrentContext: cmp.Or(c.ConfigContext, os.Getenv("KUBE_CTX")),
+		Context: clientcmdapi.Context{
+			AuthInfo: cmp.Or(c.ConfigContextAuthInfo, os.Getenv("KUBE_CTX_AUTH_INFO")),
+			Cluster:  cmp.Or(c.ConfigContextCluster, os.Getenv("KUBE_CTX_CLUSTER")),
+		},
 	}
 	if c.Token != "" {
 		overrides.AuthInfo.Token = c.Token
@@ -112,4 +123,17 @@ func (c TunnelConfig) restConfig() (*rest.Config, error) {
 		return nil, fmt.Errorf("load kubeconfig: %w", err)
 	}
 	return clientConfig, nil
+}
+
+// expandHome resolves a leading ~ since no shell sees these paths.
+func expandHome(path string) string {
+	rest, ok := strings.CutPrefix(path, "~")
+	if !ok || (rest != "" && !os.IsPathSeparator(rest[0])) {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, rest)
 }
