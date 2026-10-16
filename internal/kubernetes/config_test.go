@@ -24,8 +24,15 @@ contexts:
 current-context: a
 `
 
+// staleKubeconfig mimics a default kubeconfig whose current context was deleted.
+const staleKubeconfig = `apiVersion: v1
+kind: Config
+current-context: gone
+`
+
 // writeHomeKubeconfig isolates the home directory and kube env vars, then
-// writes a kubeconfig reachable as ~/.kube/config.
+// writes a kubeconfig reachable as ~/.kube/config and a stale one at
+// $HOME/.kube/stale.
 func writeHomeKubeconfig(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
@@ -38,6 +45,9 @@ func writeHomeKubeconfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(home, ".kube", "config"), []byte(testKubeconfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".kube", "stale"), []byte(staleKubeconfig), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -53,6 +63,18 @@ func TestRestConfigSelectsKubeconfig(t *testing.T) {
 			name:     "config_path expands home",
 			cfg:      TunnelConfig{ConfigPath: "~/.kube/config"},
 			wantHost: "https://a.example",
+		},
+		{
+			name:     "config_path with config_context",
+			cfg:      TunnelConfig{ConfigPath: "~/.kube/config", ConfigContext: "b"},
+			env:      map[string]string{"KUBECONFIG": "$HOME/.kube/stale"},
+			wantHost: "https://b.example",
+		},
+		{
+			name:     "explicit host ignores default kubeconfig and KUBE_CTX",
+			cfg:      TunnelConfig{Host: "https://explicit.example", Token: "t"},
+			env:      map[string]string{"KUBECONFIG": "$HOME/.kube/stale", "KUBE_CTX": "gone"},
+			wantHost: "https://explicit.example",
 		},
 		{
 			name:     "config_paths expands home",
@@ -80,7 +102,7 @@ func TestRestConfigSelectsKubeconfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			writeHomeKubeconfig(t)
 			for k, v := range tt.env {
-				t.Setenv(k, v)
+				t.Setenv(k, os.ExpandEnv(v))
 			}
 
 			restCfg, err := tt.cfg.restConfig()

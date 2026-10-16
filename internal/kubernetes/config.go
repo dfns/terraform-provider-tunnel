@@ -47,7 +47,9 @@ type ExecConfig struct {
 
 // restConfig assembles the client configuration from kubeconfig files plus the
 // explicit overrides carried in the tunnel config. Like the hashicorp/kubernetes
-// provider, unset kubeconfig attributes fall back to KUBE_* env vars.
+// provider, unset kubeconfig attributes fall back to KUBE_* env vars, and
+// neither $KUBECONFIG nor ~/.kube/config is read unless a path is given, so a
+// stale default kubeconfig can't break an explicitly configured cluster.
 func (c TunnelConfig) restConfig() (*rest.Config, error) {
 	configPaths, configPath := c.ConfigPaths, c.ConfigPath
 	if len(configPaths) == 0 && configPath == "" {
@@ -55,22 +57,24 @@ func (c TunnelConfig) restConfig() (*rest.Config, error) {
 		configPath = os.Getenv("KUBE_CONFIG_PATH")
 	}
 
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	if len(configPaths) > 0 {
-		loadingRules.Precedence = make([]string, len(configPaths))
-		for i, path := range configPaths {
-			loadingRules.Precedence[i] = expandHome(path)
+	loadingRules := &clientcmd.ClientConfigLoadingRules{}
+	overrides := &clientcmd.ConfigOverrides{}
+	if len(configPaths) > 0 || configPath != "" {
+		if len(configPaths) > 0 {
+			loadingRules.Precedence = make([]string, len(configPaths))
+			for i, path := range configPaths {
+				loadingRules.Precedence[i] = expandHome(path)
+			}
+		} else {
+			loadingRules.ExplicitPath = expandHome(configPath)
 		}
-	} else if configPath != "" {
-		loadingRules.ExplicitPath = expandHome(configPath)
-	}
 
-	overrides := &clientcmd.ConfigOverrides{
-		CurrentContext: cmp.Or(c.ConfigContext, os.Getenv("KUBE_CTX")),
-		Context: clientcmdapi.Context{
+		// Contexts name kubeconfig entries; without a file they can only fail lookup.
+		overrides.CurrentContext = cmp.Or(c.ConfigContext, os.Getenv("KUBE_CTX"))
+		overrides.Context = clientcmdapi.Context{
 			AuthInfo: cmp.Or(c.ConfigContextAuthInfo, os.Getenv("KUBE_CTX_AUTH_INFO")),
 			Cluster:  cmp.Or(c.ConfigContextCluster, os.Getenv("KUBE_CTX_CLUSTER")),
-		},
+		}
 	}
 	if c.Token != "" {
 		overrides.AuthInfo.Token = c.Token
