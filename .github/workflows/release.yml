@@ -26,18 +26,17 @@ jobs:
           fetch-depth: 0
 
       - name: Configuration
-        uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
-        with:
-          path: .releaserc.yml
-          contents: |
-            branches:
-              - main
-            plugins:
-              - - '@semantic-release/commit-analyzer'
-                - releaseRules:
-                    - type: chore
-                      scope: deps
-                      release: patch
+        run: |
+          cat > .releaserc.yml <<'EOF'
+          branches:
+            - main
+          plugins:
+            - - '@semantic-release/commit-analyzer'
+              - releaseRules:
+                  - type: chore
+                    scope: deps
+                    release: patch
+          EOF
 
       - name: Semantic release
         id: semantic
