@@ -15,7 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.80.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4
-	github.com/aws/session-manager-plugin v0.0.0-20241119210807-82dc72922492
+	github.com/aws/session-manager-plugin v0.0.0-20261009233402-6430675a4403
 	github.com/aws/smithy-go v1.28.5
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
