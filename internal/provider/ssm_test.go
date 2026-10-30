@@ -38,7 +38,7 @@ func TestSSMTunnelConfigDefaults(t *testing.T) {
 	if cfg.SSMInstance != "i-instanceid" || cfg.TargetHost != "db.internal" || cfg.TargetPort != "5432" {
 		t.Fatalf("target not mapped: %+v", cfg)
 	}
-	// The session manager plugin always binds localhost, so the model must say so
+	// The SSM tunnel always binds localhost, so the model must say so
 	// regardless of what the caller configured.
 	if data.LocalHost.ValueString() != "localhost" {
 		t.Fatalf("model local host = %q, want localhost", data.LocalHost.ValueString())

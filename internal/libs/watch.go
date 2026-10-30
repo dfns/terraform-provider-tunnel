@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"runtime"
 	"syscall"
@@ -80,41 +79,6 @@ func terminate(proc *ps.Process) error {
 		return proc.Terminate()
 	}
 	return proc.SendSignal(syscall.SIGINT)
-}
-
-// SignalReadyWhenServing signals readiness once the local port accepts
-// connections. Tunnels driven by a client library that blocks for the tunnel's
-// lifetime cannot signal inline, so they observe their own listener instead.
-func SignalReadyWhenServing(ctx context.Context, host string, port string) error {
-	if err := waitForLocalPort(ctx, host, port); err != nil {
-		return err
-	}
-	return SignalReadyIfRequested()
-}
-
-func waitForLocalPort(ctx context.Context, host string, port string) error {
-	timeout := 30 * time.Second
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	addr := net.JoinHostPort(host, port)
-
-	for {
-		conn, err := net.DialTimeout("tcp", addr, time.Second)
-		if err == nil {
-			conn.Close()
-			return nil
-		}
-		select {
-		case <-waitCtx.Done():
-			if err := ctx.Err(); err != nil {
-				return fmt.Errorf("wait for tunnel port: %w", err)
-			}
-			return fmt.Errorf("port %s not accepting connections after %s", port, timeout)
-		case <-ticker.C:
-		}
-	}
 }
 
 func SignalReady(path string) error {

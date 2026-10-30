@@ -6,31 +6,33 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
+	"os/signal"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
-	pluginSession "github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session"
-	_ "github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session/portsession"
-	"github.com/aws/smithy-go/ptr"
 	"github.com/dfns/terraform-provider-tunnel/internal/libs"
+	"github.com/xtaci/smux"
 )
 
 var TunnelType string = "ssm"
 
-func GetEndpoint(ctx context.Context, region string) (string, error) {
-	resolver := ssm.NewDefaultEndpointResolverV2()
-	endpoint, err := resolver.ResolveEndpoint(ctx, ssm.EndpointParameters{
-		Region: ptr.String(region),
-	})
-	if err != nil {
-		return "", err
-	}
-	return endpoint.URI.String(), nil
-}
-
 func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) (*exec.Cmd, error) {
+	// A snapshot rather than the provider chain: the child's only AWS call,
+	// GenerateDataKey for KMS encryption, happens seconds after the fork.
+	creds, err := awsCfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve AWS credentials: %w", err)
+	}
+	cfg.Credentials = &creds
+
 	// The session is started here rather than in the child so that credential
 	// resolution stays in the provider process, as the AWS CLI does before
 	// handing the response to the plugin, last checked at
@@ -57,61 +59,97 @@ func ForkRemoteTunnel(ctx context.Context, awsCfg aws.Config, cfg TunnelConfig) 
 	return cmd, err
 }
 
-func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) (err error) {
+func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) error {
 	var cfg TunnelConfig
 	if err := json.Unmarshal([]byte(cfgJson), &cfg); err != nil {
 		return err
 	}
-	if cfg.SessionParams == nil {
+	if cfg.SessionParams == nil || cfg.Credentials == nil {
 		return errors.New("missing SSM session parameters")
 	}
 
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	defer stop()
+
 	// Watch parent process lifecycle ie. main terraform process
-	err = libs.WatchProcess(parentPid)
-	if err != nil {
+	if err := libs.WatchProcess(parentPid); err != nil {
 		return err
 	}
 
-	sessionParamsJson, err := json.Marshal(cfg.SessionParams)
+	localAddr := net.JoinHostPort("localhost", cfg.LocalPort)
+	listener, err := net.Listen("tcp", localAddr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", localAddr, err)
+	}
+	defer listener.Close()
+
+	kmsClient := kms.NewFromConfig(aws.Config{
+		Region:      cfg.SSMRegion,
+		Credentials: credentials.StaticCredentialsProvider{Value: *cfg.Credentials},
+	})
+	dc, agentVersion, err := dial(ctx, *cfg.SessionParams, cfg.SSMInstance, kmsClient)
 	if err != nil {
 		return err
 	}
+	defer dc.Close()
 
-	sessionInput := CreateSessionInput(cfg)
-	sessionInputJson, err := json.Marshal(sessionInput)
+	muxCfg, err := muxConfig(agentVersion)
 	if err != nil {
 		return err
 	}
-
-	endpointUrl, err := GetEndpoint(ctx, cfg.SSMRegion)
+	mux, err := smux.Client(dc, muxCfg)
 	if err != nil {
 		return err
 	}
+	defer mux.Close()
 
-	// Positional layout copied from the AWS CLI, last checked at
-	// https://github.com/aws/aws-cli/blob/5ad8dc60682d72edf21be96f0a591402f91ee45e/awscli/customizations/sessionmanager.py
-	// Newer CLIs hand the plugin an env var name here instead, but the vendored
-	// plugin only reads the response itself from this argument.
-	args := []string{
-		"session-manager-plugin",
-		string(sessionParamsJson),
-		cfg.SSMRegion,
-		"StartSession",
-		cfg.SSMProfile,
-		string(sessionInputJson),
-		endpointUrl,
+	if err := libs.SignalReadyIfRequested(); err != nil {
+		return err
 	}
+	log.Printf("SSM tunnel listening on %s", listener.Addr())
 
-	// The plugin blocks for the tunnel's lifetime and exposes no readiness hook,
-	// so readiness is reported from the outside once it binds the local port.
-	go func() {
-		if err := libs.SignalReadyWhenServing(ctx, "localhost", cfg.LocalPort); err != nil {
-			log.Printf("failed to signal tunnel readiness: %v", err)
+	err = libs.NewConnServer(listener, func(_ context.Context, conn net.Conn) {
+		stream, err := mux.OpenStream()
+		if err != nil {
+			log.Printf("open SSM stream: %v", err)
+			return
 		}
-	}()
+		// smux refuses writes once the agent closed the stream, so a client
+		// still holding its end open is cut off instead of waited on.
+		libs.RelayDrain(conn, stream, time.Second)
+	}).Serve(dc.Context())
+	if err != nil || ctx.Err() != nil {
+		return err
+	}
+	return context.Cause(dc.Context())
+}
 
-	// call session-manager-plugin to start the tunnel
-	pluginSession.ValidateInputAndStartSession(args, os.Stdout)
+// muxConfig applies the plugin's agent version gates, which are strict.
+func muxConfig(agentVersion string) (*smux.Config, error) {
+	if !agentVersionAfter(agentVersion, "3.0.196.0") {
+		return nil, fmt.Errorf("SSM agent %s too old for port forwarding, need > 3.0.196.0", agentVersion)
+	}
+	cfg := smux.DefaultConfig()
+	cfg.KeepAliveDisabled = agentVersionAfter(agentVersion, "3.1.1511.0")
+	return cfg, nil
+}
 
-	return
+// agentVersionAfter compares like the plugin, where versions that differ in
+// length or are not numeric are never after.
+func agentVersionAfter(version, than string) bool {
+	a, b := strings.Split(version, "."), strings.Split(than, ".")
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		x, errX := strconv.Atoi(a[i])
+		y, errY := strconv.Atoi(b[i])
+		if errX != nil || errY != nil {
+			return false
+		}
+		if x != y {
+			return x > y
+		}
+	}
+	return false
 }
