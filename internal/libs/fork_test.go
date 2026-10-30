@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,11 +25,7 @@ type forkTestConfig struct {
 
 func runForkTestChild() {
 	var cfg forkTestConfig
-	cfgJSON, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		os.Exit(2)
-	}
-	if err := json.Unmarshal(cfgJSON, &cfg); err != nil {
+	if err := json.NewDecoder(os.Stdin).Decode(&cfg); err != nil {
 		os.Exit(2)
 	}
 	if cfg.PIDPath != "" {
