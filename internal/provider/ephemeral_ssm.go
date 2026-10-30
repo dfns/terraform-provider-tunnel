@@ -66,9 +66,9 @@ func (d *SSMEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, 
 				Optional:            true,
 				Computed:            true,
 			},
-			// Computed attributes
 			"local_host": schema.StringAttribute{
-				MarkdownDescription: "The DNS name or IP address of the local host",
+				MarkdownDescription: "The local address to listen on. Defaults to `localhost`.",
+				Optional:            true,
 				Computed:            true,
 			},
 		},

@@ -17,6 +17,7 @@ const DefaultSSMDocument = "AWS-StartPortForwardingSessionToRemoteHost"
 const sessionCleanupTimeout = 10 * time.Second
 
 type TunnelConfig struct {
+	LocalHost   string
 	LocalPort   string
 	SSMInstance string
 	SSMDocument string

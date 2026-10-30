@@ -76,7 +76,11 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) error
 		return err
 	}
 
-	localAddr := net.JoinHostPort("localhost", cfg.LocalPort)
+	localHost := cfg.LocalHost
+	if localHost == "" {
+		localHost = "localhost"
+	}
+	localAddr := net.JoinHostPort(localHost, cfg.LocalPort)
 	listener, err := net.Listen("tcp", localAddr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", localAddr, err)

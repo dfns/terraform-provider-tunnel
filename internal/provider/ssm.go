@@ -75,11 +75,13 @@ func ssmTunnelConfig(data *SSMModel) (ssm.TunnelConfig, diag.Diagnostics) {
 		}
 	}
 
-	// The tunnel binds localhost.
-	data.LocalHost = types.StringValue("localhost")
+	if data.LocalHost.IsNull() || data.LocalHost.ValueString() == "" {
+		data.LocalHost = types.StringValue("localhost")
+	}
 	data.LocalPort = types.Int64Value(int64(localPort))
 
 	return ssm.TunnelConfig{
+		LocalHost:   data.LocalHost.ValueString(),
 		LocalPort:   strconv.Itoa(localPort),
 		SSMInstance: data.SSMInstance.ValueString(),
 		SSMDocument: data.SSMDocument.ValueString(),
