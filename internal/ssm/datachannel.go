@@ -35,19 +35,22 @@ const (
 	// inboxSize bounds how far ahead of the consumer inbound messages are held.
 	// It is the plugin's size: the agent recovers drops one resend per tick, so
 	// a local reader stalled past a smaller inbox leaves the tunnel crawling.
-	inboxSize = 10000
-	// MGS drops bursts above about 1.3k messages per second, and each loss then
-	// costs a resend tick, so Write paces itself like the plugin does.
-	paceInterval     = time.Millisecond
+	inboxSize        = 10000
 	resendTick       = 100 * time.Millisecond
 	resendAfter      = time.Second
 	pingInterval     = 5 * time.Minute
 	terminateTimeout = time.Second
 )
 
-// ackTimeout bounds how long a message may stay unacknowledged, and a write
-// may block. It is a variable so tests can shorten it.
-var ackTimeout = 5 * time.Minute
+// Variables so tests can change them.
+var (
+	// ackTimeout bounds how long a message may stay unacknowledged, and a write
+	// may block.
+	ackTimeout = 5 * time.Minute
+	// MGS drops bursts above about 1.3k messages per second, and each loss then
+	// costs a resend tick, so Write paces itself like the plugin does.
+	paceInterval = time.Millisecond
+)
 
 const (
 	msgInputStreamData  = "input_stream_data"

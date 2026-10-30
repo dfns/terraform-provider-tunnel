@@ -60,6 +60,13 @@ var (
 	)
 )
 
+func TestMain(m *testing.M) {
+	// Pacing only matters against MGS, and would make every write-heavy test
+	// take seconds.
+	paceInterval = 0
+	os.Exit(m.Run())
+}
+
 func mustDecodeHex(s string) []byte {
 	b, err := hex.DecodeString(s)
 	if err != nil {
@@ -138,7 +145,7 @@ func newFakeAgent(t *testing.T) *fakeAgent {
 	t.Helper()
 	agent := &fakeAgent{sessions: make(chan *agentSession, 1), stop: make(chan struct{})}
 	upgrader := websocket.Upgrader{}
-	agent.Server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	agent.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
@@ -157,26 +164,12 @@ func newFakeAgent(t *testing.T) *fakeAgent {
 		agent.sessions <- s
 		s.readLoop(agent.stop)
 	}))
-	agent.Listener = smallReadBufferListener{agent.Listener}
-	agent.Start()
 	t.Cleanup(func() {
 		close(agent.stop)
 		agent.CloseClientConnections()
 		agent.Close()
 	})
 	return agent
-}
-
-// smallReadBufferListener keeps socket buffers well under the window, so an
-// agent that stops reading stalls the client's writes before the window fills.
-type smallReadBufferListener struct{ net.Listener }
-
-func (l smallReadBufferListener) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
-	if tcp, ok := conn.(*net.TCPConn); ok {
-		_ = tcp.SetReadBuffer(16 << 10)
-	}
-	return conn, err
 }
 
 func (a *fakeAgent) session() SessionParams {
@@ -587,8 +580,7 @@ func TestDataChannelWritesPastTheWindowWhileNotReading(t *testing.T) {
 
 func TestDataChannelFailsWithoutAcknowledgements(t *testing.T) {
 	defer func(d time.Duration) { ackTimeout = d }(ackTimeout)
-	// Long enough for paced writes to fill the window first.
-	ackTimeout = 3 * time.Second
+	ackTimeout = 300 * time.Millisecond
 
 	agent := newFakeAgent(t)
 	dc, s := connect(t, agent)
@@ -785,11 +777,11 @@ func TestDataChannelFailsWhenAcknowledgementsStall(t *testing.T) {
 	// Above resendAfter, so the resend a stalled write would pin does run.
 	ackTimeout = resendAfter + time.Second
 
-	writeUntilFailure := func(dc *dataChannel) <-chan error {
+	untilFailure := func(write func() error) <-chan error {
 		failed := make(chan error, 1)
 		go func() {
 			for {
-				if _, err := dc.Write(make([]byte, payloadSize)); err != nil {
+				if err := write(); err != nil {
 					failed <- err
 					return
 				}
@@ -815,7 +807,10 @@ func TestDataChannelFailsWhenAcknowledgementsStall(t *testing.T) {
 		}()
 
 		start := time.Now()
-		err := receive(t, writeUntilFailure(dc))
+		err := receive(t, untilFailure(func() error {
+			_, err := dc.Write(make([]byte, payloadSize))
+			return err
+		}))
 		if err == nil || !strings.Contains(err.Error(), "no acknowledgement") {
 			t.Fatalf("Write() error = %v, want no acknowledgement", err)
 		}
@@ -829,10 +824,41 @@ func TestDataChannelFailsWhenAcknowledgementsStall(t *testing.T) {
 		dc, s := connect(t, agent)
 		s.stalled.Store(true)
 
-		if err := receive(t, writeUntilFailure(dc)); !errors.Is(err, os.ErrDeadlineExceeded) {
-			t.Fatalf("Write() error = %v, want the write deadline", err)
+		// send skips the window, so the socket blocks whatever its buffer sizes.
+		err := receive(t, untilFailure(func() error {
+			return dc.send(payloadOutput, make([]byte, payloadSize))
+		}))
+		if !errors.Is(err, os.ErrDeadlineExceeded) {
+			t.Fatalf("send() error = %v, want the write deadline", err)
 		}
 	})
+}
+
+// A write stalled while holding the write lock must not hold Close past the
+// terminate flag's budget, long before its write deadline.
+func TestDataChannelClosesWithinBudgetWhileWriteStalled(t *testing.T) {
+	agent := newFakeAgent(t)
+	dc, s := connect(t, agent)
+	s.stalled.Store(true)
+
+	var sent atomic.Int64
+	go func() {
+		// send skips the window, so the socket blocks whatever its buffer sizes.
+		for dc.send(payloadOutput, make([]byte, payloadSize)) == nil {
+			sent.Add(1)
+		}
+	}()
+	waitFor(t, "a write to block", func() bool {
+		before := sent.Load()
+		time.Sleep(100 * time.Millisecond)
+		return before > 0 && sent.Load() == before
+	})
+
+	start := time.Now()
+	_ = dc.Close()
+	if elapsed := time.Since(start); elapsed > terminateTimeout+500*time.Millisecond {
+		t.Fatalf("Close() took %s with a write stalled, want under the %s terminate budget", elapsed, terminateTimeout)
+	}
 }
 
 // tunnel is StartRemoteTunnel running against the fake agent, ready.
@@ -932,32 +958,16 @@ func TestStartRemoteTunnelForwardsConcurrentConnections(t *testing.T) {
 	wg.Wait()
 }
 
+// A relay blocked on a full window must not hold the tunnel past shutdown.
 func TestStartRemoteTunnelStopsWithinBudget(t *testing.T) {
-	// Leaves room above terminateTimeout, which a stalled write spends in full.
-	const limit = terminateTimeout + time.Second
+	agent := newFakeAgent(t)
+	tun := startTunnel(t, agent)
+	tun.session.withholdAcks.Store(true)
+	conn := tun.dial(t)
+	go func() { _, _ = conn.Write(make([]byte, 2*windowSize*payloadSize)) }()
+	waitFor(t, "the window to fill", func() bool { return len(tun.session.inputs) >= windowSize })
 
-	t.Run("relay blocked on a full window", func(t *testing.T) {
-		agent := newFakeAgent(t)
-		tun := startTunnel(t, agent)
-		tun.session.withholdAcks.Store(true)
-		conn := tun.dial(t)
-		go func() { _, _ = conn.Write(make([]byte, 2*windowSize*payloadSize)) }()
-		waitFor(t, "the window to fill", func() bool { return len(tun.session.inputs) >= windowSize })
-
-		tun.stopWithin(t, limit)
-	})
-
-	t.Run("WebSocket write stalled", func(t *testing.T) {
-		agent := newFakeAgent(t)
-		tun := startTunnel(t, agent)
-		tun.session.stalled.Store(true)
-		conn := tun.dial(t)
-		go func() { _, _ = conn.Write(make([]byte, 8*windowSize*payloadSize)) }()
-		// Long enough for the agent to stop reading and the socket buffers to fill.
-		time.Sleep(300 * time.Millisecond)
-
-		tun.stopWithin(t, limit)
-	})
+	tun.stopWithin(t, terminateTimeout+time.Second)
 }
 
 func TestStartRemoteTunnelTerminatesSessionOnStop(t *testing.T) {
