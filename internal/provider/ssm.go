@@ -75,12 +75,13 @@ func ssmTunnelConfig(data *SSMModel) (ssm.TunnelConfig, diag.Diagnostics) {
 		}
 	}
 
-	// Hardcoded in session manager plugin
-	// see: https://github.com/aws/session-manager-plugin/blob/mainline/src/sessionmanagerplugin/session/portsession/muxportforwarding.go#L245
-	data.LocalHost = types.StringValue("localhost")
+	if data.LocalHost.IsNull() || data.LocalHost.ValueString() == "" {
+		data.LocalHost = types.StringValue("localhost")
+	}
 	data.LocalPort = types.Int64Value(int64(localPort))
 
 	return ssm.TunnelConfig{
+		LocalHost:   data.LocalHost.ValueString(),
 		LocalPort:   strconv.Itoa(localPort),
 		SSMInstance: data.SSMInstance.ValueString(),
 		SSMDocument: data.SSMDocument.ValueString(),

@@ -17,6 +17,7 @@ const DefaultSSMDocument = "AWS-StartPortForwardingSessionToRemoteHost"
 const sessionCleanupTimeout = 10 * time.Second
 
 type TunnelConfig struct {
+	LocalHost   string
 	LocalPort   string
 	SSMInstance string
 	SSMDocument string
@@ -26,9 +27,10 @@ type TunnelConfig struct {
 	TargetHost  string
 	TargetPort  string
 
-	// SessionParams is set by the parent to hand the started session to the
-	// forked child, and is unset everywhere else.
-	SessionParams *SessionParams `json:",omitempty"`
+	// SessionParams and Credentials are set by the parent to hand the started
+	// session to the forked child, and are unset everywhere else.
+	SessionParams *SessionParams   `json:",omitempty"`
+	Credentials   *aws.Credentials `json:",omitempty"`
 }
 
 type SessionParams struct {

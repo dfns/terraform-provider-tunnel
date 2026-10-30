@@ -38,10 +38,8 @@ func TestSSMTunnelConfigDefaults(t *testing.T) {
 	if cfg.SSMInstance != "i-instanceid" || cfg.TargetHost != "db.internal" || cfg.TargetPort != "5432" {
 		t.Fatalf("target not mapped: %+v", cfg)
 	}
-	// The session manager plugin always binds localhost, so the model must say so
-	// regardless of what the caller configured.
-	if data.LocalHost.ValueString() != "localhost" {
-		t.Fatalf("model local host = %q, want localhost", data.LocalHost.ValueString())
+	if cfg.LocalHost != "localhost" || data.LocalHost.ValueString() != "localhost" {
+		t.Fatalf("local host = %q, model %q, want localhost", cfg.LocalHost, data.LocalHost.ValueString())
 	}
 	if data.LocalPort.ValueInt64() != 14433 {
 		t.Fatalf("model local port = %d, want 14433", data.LocalPort.ValueInt64())
@@ -73,6 +71,19 @@ func TestSSMTunnelConfigAllocatesFreeLocalPort(t *testing.T) {
 				t.Fatal("model local port not updated")
 			}
 		})
+	}
+}
+
+func TestSSMTunnelConfigKeepsLocalHost(t *testing.T) {
+	data := minimalSSMModel()
+	data.LocalHost = types.StringValue("0.0.0.0")
+
+	cfg, diags := ssmTunnelConfig(&data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if cfg.LocalHost != "0.0.0.0" || data.LocalHost.ValueString() != "0.0.0.0" {
+		t.Fatalf("local host = %q, model %q, want 0.0.0.0", cfg.LocalHost, data.LocalHost.ValueString())
 	}
 }
 
