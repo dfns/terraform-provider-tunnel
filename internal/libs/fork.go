@@ -1,6 +1,7 @@
 package libs
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,9 +37,10 @@ func ForkTunnel(ctx context.Context, tunnelType, logName string, cfg any) (*exec
 	cmd.Env = append(
 		os.Environ(),
 		fmt.Sprintf("%s=%s", TunnelTypeEnv, tunnelType),
-		fmt.Sprintf("%s=%s", TunnelConfEnv, string(cfgJSON)),
 		fmt.Sprintf("%s=%s", TunnelReadyEnv, readyPath),
 	)
+	// Unlike the environment, stdin is not readable from /proc/<pid>/environ or ps.
+	cmd.Stdin = bytes.NewReader(cfgJSON)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 

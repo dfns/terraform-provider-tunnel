@@ -4,24 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 
 	azb "github.com/dfns/terraform-provider-tunnel/internal/azurebastion"
 	k8s "github.com/dfns/terraform-provider-tunnel/internal/kubernetes"
-	"github.com/dfns/terraform-provider-tunnel/internal/libs"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssh"
 	"github.com/dfns/terraform-provider-tunnel/internal/ssm"
 )
 
-func StartTunnel(tun string) error {
-	cfgJson := os.Getenv(libs.TunnelConfEnv)
-	if cfgJson == "" {
+func StartTunnel(tun string, conf io.Reader) error {
+	cfg, err := io.ReadAll(conf)
+	if err != nil {
+		return fmt.Errorf("read tunnel configuration: %w", err)
+	}
+	if len(cfg) == 0 {
 		return errors.New("missing tunnel configuration")
 	}
-	if err := os.Unsetenv(libs.TunnelConfEnv); err != nil {
-		return err
-	}
+	cfgJson := string(cfg)
 
 	if len(os.Args) < 2 {
 		return errors.New("missing parent PID")
