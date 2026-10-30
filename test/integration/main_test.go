@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	// Production dispatch path: when re-executed by ForkRemoteTunnel, behave like
 	// the real provider binary's main() and run the requested tunnel in-process.
 	if tun := os.Getenv(libs.TunnelTypeEnv); tun != "" {
-		if err := runner.StartTunnel(tun); err != nil {
+		if err := runner.StartTunnel(tun, os.Stdin); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

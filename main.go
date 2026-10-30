@@ -42,7 +42,7 @@ func main() {
 	var err error
 
 	if tun := os.Getenv(libs.TunnelTypeEnv); tun != "" {
-		err = runner.StartTunnel(tun)
+		err = runner.StartTunnel(tun, os.Stdin)
 	} else {
 		err = StartServer()
 	}

@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,12 +20,17 @@ const forkTestTunnelType = "libs-fork-test"
 type forkTestConfig struct {
 	PIDPath       string
 	ReadyPathPath string
+	EnvPath       string
 	SignalReady   bool
 }
 
 func runForkTestChild() {
 	var cfg forkTestConfig
-	if err := json.Unmarshal([]byte(os.Getenv(TunnelConfEnv)), &cfg); err != nil {
+	cfgJSON, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		os.Exit(2)
+	}
+	if err := json.Unmarshal(cfgJSON, &cfg); err != nil {
 		os.Exit(2)
 	}
 	if cfg.PIDPath != "" {
@@ -33,6 +40,11 @@ func runForkTestChild() {
 	}
 	if cfg.ReadyPathPath != "" {
 		if err := os.WriteFile(cfg.ReadyPathPath, []byte(os.Getenv(TunnelReadyEnv)), 0600); err != nil {
+			os.Exit(2)
+		}
+	}
+	if cfg.EnvPath != "" {
+		if err := os.WriteFile(cfg.EnvPath, []byte(strings.Join(os.Environ(), "\n")), 0600); err != nil {
 			os.Exit(2)
 		}
 	}
@@ -64,23 +76,28 @@ func TestForkTunnelUsesInvocationUniqueReadinessPaths(t *testing.T) {
 		err error
 	}
 	results := make(chan result, 2)
-	captures := []string{
-		filepath.Join(t.TempDir(), "ready-path"),
-		filepath.Join(t.TempDir(), "ready-path"),
+	cfgs := make([]forkTestConfig, 2)
+	for i := range cfgs {
+		dir := t.TempDir()
+		cfgs[i] = forkTestConfig{
+			ReadyPathPath: filepath.Join(dir, "ready-path"),
+			EnvPath:       filepath.Join(dir, "env"),
+			SignalReady:   true,
+		}
 	}
-	for i, capture := range captures {
+	for i, cfg := range cfgs {
 		go func() {
 			cmd, err := ForkTunnel(
 				ctx,
 				forkTestTunnelType,
 				fmt.Sprintf("fork-%d.log", i),
-				forkTestConfig{ReadyPathPath: capture, SignalReady: true},
+				cfg,
 			)
 			results <- result{cmd: cmd, err: err}
 		}()
 	}
 
-	for range captures {
+	for range cfgs {
 		got := <-results
 		if got.cmd != nil {
 			t.Cleanup(func() {
@@ -96,16 +113,27 @@ func TestForkTunnelUsesInvocationUniqueReadinessPaths(t *testing.T) {
 		return
 	}
 
-	first, err := os.ReadFile(captures[0])
+	// The child acting on its config proves it arrived over stdin.
+	first, err := os.ReadFile(cfgs[0].ReadyPathPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := os.ReadFile(captures[1])
+	second, err := os.ReadFile(cfgs[1].ReadyPathPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(first) == string(second) {
 		t.Fatalf("concurrent forks shared readiness path %q", first)
+	}
+
+	for _, cfg := range cfgs {
+		env, err := os.ReadFile(cfg.EnvPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(env), cfg.EnvPath) {
+			t.Fatal("tunnel config leaked into the child environment")
+		}
 	}
 }
 
