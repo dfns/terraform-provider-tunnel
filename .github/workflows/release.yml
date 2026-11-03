@@ -49,6 +49,8 @@ jobs:
     needs: semantic_release
     if: needs.semantic_release.outputs.new_release_published == 'true'
     runs-on: ubuntu-latest
+    # The signing key lives in this environment, which only main can deploy to.
+    environment: release
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
