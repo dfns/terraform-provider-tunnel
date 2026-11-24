@@ -118,8 +118,8 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) error
 			log.Printf("open SSM stream: %v", err)
 			return
 		}
-		// The agent fully closes on FIN and drops later writes, so a client
-		// still holding its end open is cut off instead of waited on.
+		// The agent's FIN is a full close that discards anything relayed after
+		// it, so a client still sending is cut off instead of waited on.
 		libs.RelayDrain(conn, stream, time.Second)
 	}).Serve(dc.Context())
 	if err != nil || ctx.Err() != nil {
