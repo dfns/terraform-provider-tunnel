@@ -944,9 +944,13 @@ func TestStartRemoteTunnelForwardsConcurrentConnections(t *testing.T) {
 		wg.Go(func() {
 			// Several payloads' worth, so chunking and reassembly both run.
 			payload := bytes.Repeat([]byte{byte('a' + i)}, 50*payloadSize+7)
-			go func() { _, _ = conn.Write(payload) }()
-			got := make([]byte, len(payload))
-			if _, err := io.ReadFull(conn, got); err != nil {
+			go func() {
+				_, _ = conn.Write(payload)
+				// The echo still in flight must survive the client's half-close.
+				_ = conn.(*net.TCPConn).CloseWrite()
+			}()
+			got, err := io.ReadAll(conn)
+			if err != nil {
 				t.Error(err)
 				return
 			}
