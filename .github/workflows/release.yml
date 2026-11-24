@@ -80,3 +80,42 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           GORELEASER_CURRENT_TAG: ${{ needs.semantic_release.outputs.new_release_git_tag }}
+
+  oci:
+    name: OCI
+    needs: [semantic_release, goreleaser]
+    runs-on: ubuntu-latest
+    # Reads the release assets and pushes them to ghcr.io for OpenTofu's oci_mirror installation method.
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@ac735097e22fe643015b0d19645f7c9a69942128 # v2.0.4
+        with:
+          version: 1.4.0
+
+      - name: Push to ghcr.io
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.semantic_release.outputs.new_release_git_tag }}
+        run: |
+          set -euo pipefail
+          version=${TAG#v}
+          prefix=terraform-provider-tunnel_${version}_
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.zip' --pattern '*_SHA256SUMS'
+          sha256sum --check --ignore-missing "${prefix}SHA256SUMS"
+          # The layout follows https://opentofu.org/docs/cli/oci_registries/provider-mirror/: an index of one manifest
+          # per platform, each holding the release zip as its only layer.
+          platforms=()
+          for zip in "$prefix"*.zip; do
+            platform=${zip#"$prefix"}
+            platform=${platform%.zip}
+            oras push --oci-layout "layout:$platform" --artifact-type application/vnd.opentofu.provider-target \
+              --artifact-platform "${platform/_//}" "$zip:archive/zip"
+            platforms+=("$platform")
+          done
+          oras manifest index create --oci-layout "layout:$version" --artifact-type application/vnd.opentofu.provider \
+            --annotation "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "${platforms[@]}"
+          oras login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<< "$GH_TOKEN"
+          oras cp --from-oci-layout "layout:$version" "ghcr.io/$GITHUB_REPOSITORY:$version"
