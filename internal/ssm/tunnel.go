@@ -118,7 +118,7 @@ func StartRemoteTunnel(ctx context.Context, cfgJson string, parentPid int) error
 			log.Printf("open SSM stream: %v", err)
 			return
 		}
-		// smux refuses writes once the agent closed the stream, so a client
+		// The agent fully closes on FIN and drops later writes, so a client
 		// still holding its end open is cut off instead of waited on.
 		libs.RelayDrain(conn, stream, time.Second)
 	}).Serve(dc.Context())

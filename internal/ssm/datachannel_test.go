@@ -335,7 +335,8 @@ func (a *agentStream) Write(p []byte) (int, error) {
 
 func (a *agentStream) Close() error { return nil }
 
-// serveEcho runs the agent's smux server, echoing every stream.
+// serveEcho runs the agent's smux server, echoing every stream once its
+// client stops sending, so the reply depends on the stream surviving half-close.
 func (s *agentSession) serveEcho(t *testing.T) {
 	t.Helper()
 	cfg := smux.DefaultConfig()
@@ -353,7 +354,8 @@ func (s *agentSession) serveEcho(t *testing.T) {
 			}
 			go func() {
 				defer stream.Close()
-				_, _ = io.Copy(stream, stream)
+				received, _ := io.ReadAll(stream)
+				_, _ = stream.Write(received)
 			}()
 		}
 	}()
@@ -743,8 +745,16 @@ func TestDataChannelKMSEncryption(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer stream.Close()
+			if err := stream.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
 			payload := bytes.Repeat([]byte("secret"), 1000)
-			go func() { _, _ = stream.Write(payload) }()
+			if _, err := stream.Write(payload); err != nil {
+				t.Fatal(err)
+			}
+			if err := stream.CloseWrite(); err != nil {
+				t.Fatal(err)
+			}
 			echoed := make([]byte, len(payload))
 			if _, err := io.ReadFull(stream, echoed); err != nil {
 				t.Fatal(err)
@@ -941,12 +951,22 @@ func TestStartRemoteTunnelForwardsConcurrentConnections(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 2 {
 		conn := tun.dial(t)
+		if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			t.Fatal(err)
+		}
 		wg.Go(func() {
 			// Several payloads' worth, so chunking and reassembly both run.
 			payload := bytes.Repeat([]byte{byte('a' + i)}, 50*payloadSize+7)
-			go func() { _, _ = conn.Write(payload) }()
-			got := make([]byte, len(payload))
-			if _, err := io.ReadFull(conn, got); err != nil {
+			if _, err := conn.Write(payload); err != nil {
+				t.Error(err)
+				return
+			}
+			if !libs.HalfClose(conn) {
+				t.Errorf("%T cannot half-close", conn)
+				return
+			}
+			got, err := io.ReadAll(conn)
+			if err != nil {
 				t.Error(err)
 				return
 			}
