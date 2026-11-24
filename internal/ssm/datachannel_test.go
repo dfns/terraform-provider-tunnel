@@ -961,8 +961,8 @@ func TestStartRemoteTunnelForwardsConcurrentConnections(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			if err := conn.(*net.TCPConn).CloseWrite(); err != nil {
-				t.Error(err)
+			if !libs.HalfClose(conn) {
+				t.Errorf("%T cannot half-close", conn)
 				return
 			}
 			got, err := io.ReadAll(conn)
