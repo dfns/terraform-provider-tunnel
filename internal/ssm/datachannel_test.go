@@ -335,9 +335,8 @@ func (a *agentStream) Write(p []byte) (int, error) {
 
 func (a *agentStream) Close() error { return nil }
 
-// serveEcho runs the agent's smux server, echoing every stream once its
-// client stops sending, so the reply depends on the stream surviving half-close.
-func (s *agentSession) serveEcho(t *testing.T) {
+// serve runs the agent's smux server, handling every stream.
+func (s *agentSession) serve(t *testing.T, handle func(*smux.Stream)) {
 	t.Helper()
 	cfg := smux.DefaultConfig()
 	cfg.KeepAliveDisabled = true
@@ -354,12 +353,13 @@ func (s *agentSession) serveEcho(t *testing.T) {
 			}
 			go func() {
 				defer stream.Close()
-				received, _ := io.ReadAll(stream)
-				_, _ = stream.Write(received)
+				handle(stream)
 			}()
 		}
 	}()
 }
+
+func echo(stream *smux.Stream) { _, _ = io.Copy(stream, stream) }
 
 type dialResult struct {
 	dc           *dataChannel
@@ -739,22 +739,14 @@ func TestDataChannelKMSEncryption(t *testing.T) {
 				s.challenge(t)
 			}
 
-			s.serveEcho(t)
+			s.serve(t, echo)
 			stream, err := mux.OpenStream()
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer stream.Close()
-			if err := stream.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-				t.Fatal(err)
-			}
 			payload := bytes.Repeat([]byte("secret"), 1000)
-			if _, err := stream.Write(payload); err != nil {
-				t.Fatal(err)
-			}
-			if err := stream.CloseWrite(); err != nil {
-				t.Fatal(err)
-			}
+			go func() { _, _ = stream.Write(payload) }()
 			echoed := make([]byte, len(payload))
 			if _, err := io.ReadFull(stream, echoed); err != nil {
 				t.Fatal(err)
@@ -946,27 +938,17 @@ func (tun *tunnel) stopWithin(t *testing.T, limit time.Duration) {
 func TestStartRemoteTunnelForwardsConcurrentConnections(t *testing.T) {
 	agent := newFakeAgent(t)
 	tun := startTunnel(t, agent)
-	tun.session.serveEcho(t)
+	tun.session.serve(t, echo)
 
 	var wg sync.WaitGroup
 	for i := range 2 {
 		conn := tun.dial(t)
-		if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-			t.Fatal(err)
-		}
 		wg.Go(func() {
 			// Several payloads' worth, so chunking and reassembly both run.
 			payload := bytes.Repeat([]byte{byte('a' + i)}, 50*payloadSize+7)
-			if _, err := conn.Write(payload); err != nil {
-				t.Error(err)
-				return
-			}
-			if !libs.HalfClose(conn) {
-				t.Errorf("%T cannot half-close", conn)
-				return
-			}
-			got, err := io.ReadAll(conn)
-			if err != nil {
+			go func() { _, _ = conn.Write(payload) }()
+			got := make([]byte, len(payload))
+			if _, err := io.ReadFull(conn, got); err != nil {
 				t.Error(err)
 				return
 			}
@@ -976,6 +958,37 @@ func TestStartRemoteTunnelForwardsConcurrentConnections(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// The real agent closes the target on the client's FIN, so it never replies
+// after one. This pins only our side: the relay half-closes the stream and
+// keeps reading, so a reply the agent sends after the FIN still arrives.
+func TestStartRemoteTunnelKeepsReadingAfterClientHalfClose(t *testing.T) {
+	agent := newFakeAgent(t)
+	tun := startTunnel(t, agent)
+	tun.session.serve(t, func(stream *smux.Stream) {
+		received, _ := io.ReadAll(stream)
+		_, _ = stream.Write(received)
+	})
+
+	conn := tun.dial(t)
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("reply after half-close")
+	if _, err := conn.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if !libs.HalfClose(conn) {
+		t.Fatalf("%T cannot half-close", conn)
+	}
+	got, err := io.ReadAll(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("got %q, want %q", got, payload)
+	}
 }
 
 // A relay blocked on a full window must not hold the tunnel past shutdown.
