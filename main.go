@@ -1,6 +1,9 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
+//go:generate terraform fmt -recursive ./examples/
+//go:generate go tool tfplugindocs generate --provider-name tunnel
+
 package main
 
 import (
