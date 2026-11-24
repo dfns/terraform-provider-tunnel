@@ -20,7 +20,7 @@ require (
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/shirou/gopsutil/v4 v4.26.10
-	github.com/xtaci/smux v1.5.58
+	github.com/xtaci/smux v1.5.60
 	golang.org/x/crypto v0.59.0
 	k8s.io/api v0.37.2
 	k8s.io/apimachinery v0.37.2
@@ -110,6 +110,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/run v1.1.0 // indirect
+	github.com/pion/transport/v5 v5.1.4 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/posener/complete v1.2.3 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
